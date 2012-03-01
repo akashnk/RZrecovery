@@ -61,7 +61,7 @@ int ev_sync_key_state(ev_set_key_callback set_key_cb, void *data);
  */
 int ev_wait(int timeout);
 
-int ev_get_input(int fd, short revents, struct input_event *ev);
+int ev_get_input(int fd, short revents, struct input_event *ev, unsigned keyheld);
 void ev_dispatch(void);
 
 // Resources

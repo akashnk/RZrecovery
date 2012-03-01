@@ -33,6 +33,9 @@
 #define test_bit(bit, array) \
     ((array)[(bit)/BITS_PER_LONG] & (1 << ((bit) % BITS_PER_LONG)))
 
+// The amount of time in ms to delay before duplicating a held down key.
+#define KEYHOLD_DELAY 200
+
 struct fd_info
 {
   ev_callback cb;
@@ -148,16 +151,22 @@ ev_dispatch(void)
 }
 
 int
-ev_get_input(int fd, short revents, struct input_event *ev)
+ev_get_input(int fd, short revents, struct input_event *ev, unsigned keyheld)
 {
   int r;
-
+  
+  ui_print("fd: %d\n", fd);
+  ui_print("revents: %d\n", revents);
+  ui_print("keyheld: %d\n", keyheld);  
   if (revents & POLLIN)
   {
     r = read(fd, ev, sizeof(*ev));
+    ui_print("r: %d\n", r);
     if (r == sizeof(*ev))
+    {
       return 0;
-  }
+    }
+  } 
   return -1;
 }
 

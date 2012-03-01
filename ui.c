@@ -378,13 +378,36 @@ static int
 input_callback(int fd, short revents, void *data)
 {
   struct input_event ev;
-  int ret;
+  int ret, ret2;
   int fake_key = 0;
+  int last_code = 0;
+  int keyheld = 0;
 
-  ret = ev_get_input(fd, revents, &ev);
+  ret = ev_get_input(fd, revents, &ev, keyheld);
+  ui_print("ret: %d\n", ret);
   if (ret)
+  {
+    ui_print("ret is true\n");
     return -1;
+  }
 
+  if (ret != 1)
+  {
+    if (ev.type == EV_KEY && (ev.code == KEY_UP
+      || ev.code == KEY_DOWN || ev.code == KEY_VOLUMEUP
+      || ev.code == KEY_VOLUMEDOWN) && ev.value == 1) 
+      {
+        last_code = ev.code;
+        keyheld = 1;
+      }
+      else //if its 1, repeat 
+      {
+        ev.type = EV_KEY;
+        ev.code = last_code;
+        ev.value = 1;
+      }
+   }
+  
   if (ev.type == EV_SYN)
   {
     return 0;
