@@ -24,31 +24,30 @@
 #include "mincrypt/sha.h"
 
 int
-CheckMode (int argc, char **argv)
+CheckMode(int argc, char **argv)
 {
   if (argc < 3)
-	  {
-	    return 2;
-	  }
-  return applypatch_check (argv[2], argc - 3, argv + 3);
+  {
+    return 2;
+  }
+  return applypatch_check(argv[2], argc - 3, argv + 3);
 }
 
 int
-SpaceMode (int argc, char **argv)
+SpaceMode(int argc, char **argv)
 {
   if (argc != 3)
-	  {
-	    return 2;
-	  }
+  {
+    return 2;
+  }
   char *endptr;
-  size_t bytes = strtol (argv[2], &endptr, 10);
-
+  size_t bytes = strtol(argv[2], &endptr, 10);
   if (bytes == 0 && endptr == argv[2])
-	  {
-	    printf ("can't parse \"%s\" as byte count\n\n", argv[2]);
-	    return 1;
-	  }
-  return CacheSizeCheck (bytes);
+  {
+    printf("can't parse \"%s\" as byte count\n\n", argv[2]);
+    return 1;
+  }
+  return CacheSizeCheck(bytes);
 }
 
 // Parse arguments (which should be of the form "<sha1>" or
@@ -56,117 +55,108 @@ SpaceMode (int argc, char **argv)
 // *patches (loading file contents into the patches).  Returns 0 on
 // success.
 static int
-ParsePatchArgs (int argc, char **argv,
-		char ***sha1s, Value *** patches, int *num_patches)
+ParsePatchArgs(int argc, char **argv,
+	       char ***sha1s, Value *** patches, int *num_patches)
 {
   *num_patches = argc;
-  *sha1s = malloc (*num_patches * sizeof (char *));
-  *patches = malloc (*num_patches * sizeof (Value *));
-  memset (*patches, 0, *num_patches * sizeof (Value *));
+  *sha1s = malloc(*num_patches * sizeof(char *));
+  *patches = malloc(*num_patches * sizeof(Value *));
+  memset(*patches, 0, *num_patches * sizeof(Value *));
 
   uint8_t digest[SHA_DIGEST_SIZE];
 
   int i;
-
   for (i = 0; i < *num_patches; ++i)
-	  {
-	    char *colon = strchr (argv[i], ':');
+  {
+    char *colon = strchr(argv[i], ':');
+    if (colon != NULL)
+    {
+      *colon = '\0';
+      ++colon;
+    }
 
-	    if (colon != NULL)
-		    {
-		      *colon = '\0';
-		      ++colon;
-		    }
+    if (ParseSha1(argv[i], digest) != 0)
+    {
+      printf("failed to parse sha1 \"%s\"\n", argv[i]);
+      return -1;
+    }
 
-	    if (ParseSha1 (argv[i], digest) != 0)
-		    {
-		      printf ("failed to parse sha1 \"%s\"\n", argv[i]);
-		      return -1;
-		    }
-
-	    (*sha1s)[i] = argv[i];
-	    if (colon == NULL)
-		    {
-		      (*patches)[i] = NULL;
-		    }
-	    else
-		    {
-		      FileContents fc;
-
-		      if (LoadFileContents (colon, &fc) != 0)
-			      {
-				goto abort;
-			      }
-		      (*patches)[i] = malloc (sizeof (Value));
-		      (*patches)[i]->type = VAL_BLOB;
-		      (*patches)[i]->size = fc.size;
-		      (*patches)[i]->data = (char *) fc.data;
-		    }
-	  }
+    (*sha1s)[i] = argv[i];
+    if (colon == NULL)
+    {
+      (*patches)[i] = NULL;
+    }
+    else
+    {
+      FileContents fc;
+      if (LoadFileContents(colon, &fc, RETOUCH_DONT_MASK) != 0)
+      {
+	goto abort;
+      }
+      (*patches)[i] = malloc(sizeof(Value));
+      (*patches)[i]->type = VAL_BLOB;
+      (*patches)[i]->size = fc.size;
+      (*patches)[i]->data = (char *) fc.data;
+    }
+  }
 
   return 0;
 
 abort:
   for (i = 0; i < *num_patches; ++i)
-	  {
-	    Value *p = (*patches)[i];
-
-	    if (p != NULL)
-		    {
-		      free (p->data);
-		      free (p);
-		    }
-	  }
-  free (*sha1s);
-  free (*patches);
+  {
+    Value *p = (*patches)[i];
+    if (p != NULL)
+    {
+      free(p->data);
+      free(p);
+    }
+  }
+  free(*sha1s);
+  free(*patches);
   return -1;
 }
 
 int
-PatchMode (int argc, char **argv)
+PatchMode(int argc, char **argv)
 {
   if (argc < 6)
-	  {
-	    return 2;
-	  }
+  {
+    return 2;
+  }
 
   char *endptr;
-  size_t target_size = strtol (argv[4], &endptr, 10);
-
+  size_t target_size = strtol(argv[4], &endptr, 10);
   if (target_size == 0 && endptr == argv[4])
-	  {
-	    printf ("can't parse \"%s\" as byte count\n\n", argv[4]);
-	    return 1;
-	  }
+  {
+    printf("can't parse \"%s\" as byte count\n\n", argv[4]);
+    return 1;
+  }
 
   char **sha1s;
   Value **patches;
   int num_patches;
+  if (ParsePatchArgs(argc - 5, argv + 5, &sha1s, &patches, &num_patches) != 0)
+  {
+    printf("failed to parse patch args\n");
+    return 1;
+  }
 
-  if (ParsePatchArgs (argc - 5, argv + 5, &sha1s, &patches, &num_patches) !=
-      0)
-	  {
-	    printf ("failed to parse patch args\n");
-	    return 1;
-	  }
-
-  int result = applypatch (argv[1], argv[2], argv[3], target_size,
-			   num_patches, sha1s, patches);
+  int result = applypatch(argv[1], argv[2], argv[3], target_size,
+			  num_patches, sha1s, patches);
 
   int i;
-
   for (i = 0; i < num_patches; ++i)
-	  {
-	    Value *p = patches[i];
-
-	    if (p != NULL)
-		    {
-		      free (p->data);
-		      free (p);
-		    }
-	  }
-  free (sha1s);
-  free (patches);
+  {
+    Value *p = patches[i];
+    if (p != NULL)
+    {
+      free(p->data);
+      free(p);
+    }
+  }
+  free(sha1s);
+  free(patches);
 
   return result;
 }
@@ -195,46 +185,46 @@ PatchMode (int argc, char **argv)
 // LoadMTDContents() function above for the format of such a filename.
 
 int
-main (int argc, char **argv)
+main(int argc, char **argv)
 {
   if (argc < 2)
-	  {
-	  usage:
-	    printf ("usage: %s <src-file> <tgt-file> <tgt-sha1> <tgt-size> "
-		    "[<src-sha1>:<patch> ...]\n"
-		    "   or  %s -c <file> [<sha1> ...]\n"
-		    "   or  %s -s <bytes>\n"
-		    "   or  %s -l\n"
-		    "\n"
-		    "Filenames may be of the form\n"
-		    "  MTD:<partition>:<len_1>:<sha1_1>:<len_2>:<sha1_2>:...\n"
-		    "to specify reading from or writing to an MTD partition.\n\n",
-		    argv[0], argv[0], argv[0], argv[0]);
-	    return 2;
-	  }
+  {
+  usage:
+    printf("usage: %s <src-file> <tgt-file> <tgt-sha1> <tgt-size> "
+	   "[<src-sha1>:<patch> ...]\n"
+	   "   or  %s -c <file> [<sha1> ...]\n"
+	   "   or  %s -s <bytes>\n"
+	   "   or  %s -l\n"
+	   "\n"
+	   "Filenames may be of the form\n"
+	   "  MTD:<partition>:<len_1>:<sha1_1>:<len_2>:<sha1_2>:...\n"
+	   "to specify reading from or writing to an MTD partition.\n\n",
+	   argv[0], argv[0], argv[0], argv[0]);
+    return 2;
+  }
 
   int result;
 
-  if (strncmp (argv[1], "-l", 3) == 0)
-	  {
-	    result = ShowLicenses ();
-	  }
-  else if (strncmp (argv[1], "-c", 3) == 0)
-	  {
-	    result = CheckMode (argc, argv);
-	  }
-  else if (strncmp (argv[1], "-s", 3) == 0)
-	  {
-	    result = SpaceMode (argc, argv);
-	  }
+  if (strncmp(argv[1], "-l", 3) == 0)
+  {
+    result = ShowLicenses();
+  }
+  else if (strncmp(argv[1], "-c", 3) == 0)
+  {
+    result = CheckMode(argc, argv);
+  }
+  else if (strncmp(argv[1], "-s", 3) == 0)
+  {
+    result = SpaceMode(argc, argv);
+  }
   else
-	  {
-	    result = PatchMode (argc, argv);
-	  }
+  {
+    result = PatchMode(argc, argv);
+  }
 
   if (result == 2)
-	  {
-	    goto usage;
-	  }
+  {
+    goto usage;
+  }
   return result;
 }

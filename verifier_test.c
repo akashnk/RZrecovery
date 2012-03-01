@@ -59,47 +59,45 @@ RSAPublicKey test_key = { 64, 0xc926ad21,
 };
 
 void
-ui_print (const char *fmt, ...)
+ui_print(const char *fmt, ...)
 {
   char buf[256];
   va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, 256, fmt, ap);
+  va_end(ap);
 
-  va_start (ap, fmt);
-  vsnprintf (buf, 256, fmt, ap);
-  va_end (ap);
-
-  fputs (buf, stderr);
+  fputs(buf, stderr);
 }
 
 void
-ui_set_progress (float fraction)
+ui_set_progress(float fraction)
 {
 }
 
 int
-main (int argc, char **argv)
+main(int argc, char **argv)
 {
   if (argc != 2)
-	  {
-	    fprintf (stderr, "Usage: %s <package>\n", argv[0]);
-	    return 2;
-	  }
+  {
+    fprintf(stderr, "Usage: %s <package>\n", argv[0]);
+    return 2;
+  }
 
-  int result = verify_file (argv[1], &test_key, 1);
-
+  int result = verify_file(argv[1], &test_key, 1);
   if (result == VERIFY_SUCCESS)
-	  {
-	    printf ("SUCCESS\n");
-	    return 0;
-	  }
+  {
+    printf("SUCCESS\n");
+    return 0;
+  }
   else if (result == VERIFY_FAILURE)
-	  {
-	    printf ("FAILURE\n");
-	    return 1;
-	  }
+  {
+    printf("FAILURE\n");
+    return 1;
+  }
   else
-	  {
-	    printf ("bad return value\n");
-	    return 3;
-	  }
+  {
+    printf("bad return value\n");
+    return 3;
+  }
 }

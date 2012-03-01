@@ -24,7 +24,7 @@ typedef struct MemMapping
 
 /* copy a map */
 INLINE void
-sysCopyMap (MemMapping * dst, const MemMapping * src)
+sysCopyMap(MemMapping * dst, const MemMapping * src)
 {
   *dst = *src;
 }
@@ -38,7 +38,7 @@ sysCopyMap (MemMapping * dst, const MemMapping * src)
  *
  * On success, "pMap" is filled in, and zero is returned.
  */
-int sysLoadFileInShmem (int fd, MemMapping * pMap);
+int sysLoadFileInShmem(int fd, MemMapping * pMap);
 
 /*
  * Map a file (from fd's current offset) into a shared,
@@ -46,19 +46,19 @@ int sysLoadFileInShmem (int fd, MemMapping * pMap);
  *
  * On success, "pMap" is filled in, and zero is returned.
  */
-int sysMapFileInShmem (int fd, MemMapping * pMap);
+int sysMapFileInShmem(int fd, MemMapping * pMap);
 
 /*
  * Like sysMapFileInShmem, but on only part of a file.
  */
-int sysMapFileSegmentInShmem (int fd, off_t start, long length,
-			      MemMapping * pMap);
+int sysMapFileSegmentInShmem(int fd, off_t start, long length,
+			     MemMapping * pMap);
 
 /*
  * Release the pages associated with a shared memory segment.
  *
  * This does not free "pMap"; it just releases the memory.
  */
-void sysReleaseShmem (MemMapping * pMap);
+void sysReleaseShmem(MemMapping * pMap);
 
 #endif /*_MINZIP_SYSUTIL*/

@@ -15,7 +15,7 @@
  * Get 1 byte.  (Included to make the code more legible.)
  */
 INLINE unsigned char
-get1 (unsigned const char *pSrc)
+get1(unsigned const char *pSrc)
 {
   return *pSrc;
 }
@@ -24,7 +24,7 @@ get1 (unsigned const char *pSrc)
  * Get 2 big-endian bytes.
  */
 INLINE unsigned short
-get2BE (unsigned char const *pSrc)
+get2BE(unsigned char const *pSrc)
 {
   unsigned short result;
 
@@ -38,7 +38,7 @@ get2BE (unsigned char const *pSrc)
  * Get 4 big-endian bytes.
  */
 INLINE unsigned int
-get4BE (unsigned char const *pSrc)
+get4BE(unsigned char const *pSrc)
 {
   unsigned int result;
 
@@ -54,7 +54,7 @@ get4BE (unsigned char const *pSrc)
  * Get 8 big-endian bytes.
  */
 INLINE unsigned long long
-get8BE (unsigned char const *pSrc)
+get8BE(unsigned char const *pSrc)
 {
   unsigned long long result;
 
@@ -74,7 +74,7 @@ get8BE (unsigned char const *pSrc)
  * Get 2 little-endian bytes.
  */
 INLINE unsigned short
-get2LE (unsigned char const *pSrc)
+get2LE(unsigned char const *pSrc)
 {
   unsigned short result;
 
@@ -88,7 +88,7 @@ get2LE (unsigned char const *pSrc)
  * Get 4 little-endian bytes.
  */
 INLINE unsigned int
-get4LE (unsigned char const *pSrc)
+get4LE(unsigned char const *pSrc)
 {
   unsigned int result;
 
@@ -104,7 +104,7 @@ get4LE (unsigned char const *pSrc)
  * Get 8 little-endian bytes.
  */
 INLINE unsigned long long
-get8LE (unsigned char const *pSrc)
+get8LE(unsigned char const *pSrc)
 {
   unsigned long long result;
 
@@ -124,7 +124,7 @@ get8LE (unsigned char const *pSrc)
  * Grab 1 byte and advance the data pointer.
  */
 INLINE unsigned char
-read1 (unsigned const char **ppSrc)
+read1(unsigned const char **ppSrc)
 {
   return *(*ppSrc)++;
 }
@@ -133,7 +133,7 @@ read1 (unsigned const char **ppSrc)
  * Grab 2 big-endian bytes and advance the data pointer.
  */
 INLINE unsigned short
-read2BE (unsigned char const **ppSrc)
+read2BE(unsigned char const **ppSrc)
 {
   unsigned short result;
 
@@ -147,7 +147,7 @@ read2BE (unsigned char const **ppSrc)
  * Grab 4 big-endian bytes and advance the data pointer.
  */
 INLINE unsigned int
-read4BE (unsigned char const **ppSrc)
+read4BE(unsigned char const **ppSrc)
 {
   unsigned int result;
 
@@ -163,7 +163,7 @@ read4BE (unsigned char const **ppSrc)
  * Get 8 big-endian bytes.
  */
 INLINE unsigned long long
-read8BE (unsigned char const **ppSrc)
+read8BE(unsigned char const **ppSrc)
 {
   unsigned long long result;
 
@@ -183,7 +183,7 @@ read8BE (unsigned char const **ppSrc)
  * Grab 2 little-endian bytes and advance the data pointer.
  */
 INLINE unsigned short
-read2LE (unsigned char const **ppSrc)
+read2LE(unsigned char const **ppSrc)
 {
   unsigned short result;
 
@@ -197,7 +197,7 @@ read2LE (unsigned char const **ppSrc)
  * Grab 4 little-endian bytes and advance the data pointer.
  */
 INLINE unsigned int
-read4LE (unsigned char const **ppSrc)
+read4LE(unsigned char const **ppSrc)
 {
   unsigned int result;
 
@@ -213,7 +213,7 @@ read4LE (unsigned char const **ppSrc)
  * Get 8 little-endian bytes.
  */
 INLINE unsigned long long
-read8LE (unsigned char const **ppSrc)
+read8LE(unsigned char const **ppSrc)
 {
   unsigned long long result;
 
@@ -233,9 +233,9 @@ read8LE (unsigned char const **ppSrc)
  * Skip over a UTF-8 string.
  */
 INLINE void
-skipUtf8String (unsigned char const **ppSrc)
+skipUtf8String(unsigned char const **ppSrc)
 {
-  unsigned int length = read4BE (ppSrc);
+  unsigned int length = read4BE(ppSrc);
 
   (*ppSrc) += length;
 }
@@ -246,12 +246,12 @@ skipUtf8String (unsigned char const **ppSrc)
  * Returns the length of the original string.
  */
 INLINE int
-readUtf8String (unsigned char const **ppSrc, char *buf, size_t bufLen)
+readUtf8String(unsigned char const **ppSrc, char *buf, size_t bufLen)
 {
-  unsigned int length = read4BE (ppSrc);
+  unsigned int length = read4BE(ppSrc);
   size_t copyLen = (length < bufLen) ? length : bufLen - 1;
 
-  memcpy (buf, *ppSrc, copyLen);
+  memcpy(buf, *ppSrc, copyLen);
   buf[copyLen] = '\0';
 
   (*ppSrc) += length;
@@ -265,14 +265,14 @@ readUtf8String (unsigned char const **ppSrc, char *buf, size_t bufLen)
  * for the way we're using UTF8.)
  */
 INLINE char *
-readNewUtf8String (unsigned char const **ppSrc, size_t * pLength)
+readNewUtf8String(unsigned char const **ppSrc, size_t * pLength)
 {
-  unsigned int length = read4BE (ppSrc);
+  unsigned int length = read4BE(ppSrc);
   char *buf;
 
-  buf = (char *) malloc (length + 1);
+  buf = (char *) malloc(length + 1);
 
-  memcpy (buf, *ppSrc, length);
+  memcpy(buf, *ppSrc, length);
   buf[length] = '\0';
 
   (*ppSrc) += length;
@@ -286,7 +286,7 @@ readNewUtf8String (unsigned char const **ppSrc, size_t * pLength)
  * Set 1 byte.  (Included to make the code more legible.)
  */
 INLINE void
-set1 (unsigned char *buf, unsigned char val)
+set1(unsigned char *buf, unsigned char val)
 {
   *buf = (unsigned char) (val);
 }
@@ -295,7 +295,7 @@ set1 (unsigned char *buf, unsigned char val)
  * Set 2 big-endian bytes.
  */
 INLINE void
-set2BE (unsigned char *buf, unsigned short val)
+set2BE(unsigned char *buf, unsigned short val)
 {
   *buf++ = (unsigned char) (val >> 8);
   *buf = (unsigned char) (val);
@@ -305,7 +305,7 @@ set2BE (unsigned char *buf, unsigned short val)
  * Set 4 big-endian bytes.
  */
 INLINE void
-set4BE (unsigned char *buf, unsigned int val)
+set4BE(unsigned char *buf, unsigned int val)
 {
   *buf++ = (unsigned char) (val >> 24);
   *buf++ = (unsigned char) (val >> 16);
@@ -317,7 +317,7 @@ set4BE (unsigned char *buf, unsigned int val)
  * Set 8 big-endian bytes.
  */
 INLINE void
-set8BE (unsigned char *buf, unsigned long long val)
+set8BE(unsigned char *buf, unsigned long long val)
 {
   *buf++ = (unsigned char) (val >> 56);
   *buf++ = (unsigned char) (val >> 48);
@@ -333,7 +333,7 @@ set8BE (unsigned char *buf, unsigned long long val)
  * Set 2 little-endian bytes.
  */
 INLINE void
-set2LE (unsigned char *buf, unsigned short val)
+set2LE(unsigned char *buf, unsigned short val)
 {
   *buf++ = (unsigned char) (val);
   *buf = (unsigned char) (val >> 8);
@@ -343,7 +343,7 @@ set2LE (unsigned char *buf, unsigned short val)
  * Set 4 little-endian bytes.
  */
 INLINE void
-set4LE (unsigned char *buf, unsigned int val)
+set4LE(unsigned char *buf, unsigned int val)
 {
   *buf++ = (unsigned char) (val);
   *buf++ = (unsigned char) (val >> 8);
@@ -355,7 +355,7 @@ set4LE (unsigned char *buf, unsigned int val)
  * Set 8 little-endian bytes.
  */
 INLINE void
-set8LE (unsigned char *buf, unsigned long long val)
+set8LE(unsigned char *buf, unsigned long long val)
 {
   *buf++ = (unsigned char) (val);
   *buf++ = (unsigned char) (val >> 8);
@@ -371,12 +371,12 @@ set8LE (unsigned char *buf, unsigned long long val)
  * Stuff a UTF-8 string into the buffer.
  */
 INLINE void
-setUtf8String (unsigned char *buf, const unsigned char *str)
+setUtf8String(unsigned char *buf, const unsigned char *str)
 {
-  unsigned int strLen = strlen ((const char *) str);
+  unsigned int strLen = strlen((const char *) str);
 
-  set4BE (buf, strLen);
-  memcpy (buf + sizeof (unsigned int), str, strLen);
+  set4BE(buf, strLen);
+  memcpy(buf + sizeof(unsigned int), str, strLen);
 }
 
 #endif /*_MINZIP_BITS*/

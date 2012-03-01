@@ -29,442 +29,403 @@
 //    - if Evaluate() on any argument returns NULL, return NULL.
 
 int
-BooleanString (const char *s)
+BooleanString(const char *s)
 {
   return s[0] != '\0';
 }
 
 char *
-Evaluate (State * state, Expr * expr)
+Evaluate(State * state, Expr * expr)
 {
-  Value *v = expr->fn (expr->name, state, expr->argc, expr->argv);
-
+  Value *v = expr->fn(expr->name, state, expr->argc, expr->argv);
   if (v == NULL)
     return NULL;
   if (v->type != VAL_STRING)
-	  {
-	    ErrorAbort (state, "expecting string, got value type %d",
-			v->type);
-	    FreeValue (v);
-	    return NULL;
-	  }
+  {
+    ErrorAbort(state, "expecting string, got value type %d", v->type);
+    FreeValue(v);
+    return NULL;
+  }
   char *result = v->data;
-
-  free (v);
+  free(v);
   return result;
 }
 
 Value *
-EvaluateValue (State * state, Expr * expr)
+EvaluateValue(State * state, Expr * expr)
 {
-  return expr->fn (expr->name, state, expr->argc, expr->argv);
+  return expr->fn(expr->name, state, expr->argc, expr->argv);
 }
 
 Value *
-StringValue (char *str)
+StringValue(char *str)
 {
   if (str == NULL)
     return NULL;
-  Value *v = malloc (sizeof (Value));
-
+  Value *v = malloc(sizeof(Value));
   v->type = VAL_STRING;
-  v->size = strlen (str);
+  v->size = strlen(str);
   v->data = str;
   return v;
 }
 
 void
-FreeValue (Value * v)
+FreeValue(Value * v)
 {
   if (v == NULL)
     return;
-  free (v->data);
-  free (v);
+  free(v->data);
+  free(v);
 }
 
 Value *
-ConcatFn (const char *name, State * state, int argc, Expr * argv[])
+ConcatFn(const char *name, State * state, int argc, Expr * argv[])
 {
   if (argc == 0)
-	  {
-	    return StringValue (strdup (""));
-	  }
-  char **strings = malloc (argc * sizeof (char *));
+  {
+    return StringValue(strdup(""));
+  }
+  char **strings = malloc(argc * sizeof(char *));
   int i;
-
   for (i = 0; i < argc; ++i)
-	  {
-	    strings[i] = NULL;
-	  }
+  {
+    strings[i] = NULL;
+  }
   char *result = NULL;
   int length = 0;
-
   for (i = 0; i < argc; ++i)
-	  {
-	    strings[i] = Evaluate (state, argv[i]);
-	    if (strings[i] == NULL)
-		    {
-		      goto done;
-		    }
-	    length += strlen (strings[i]);
-	  }
+  {
+    strings[i] = Evaluate(state, argv[i]);
+    if (strings[i] == NULL)
+    {
+      goto done;
+    }
+    length += strlen(strings[i]);
+  }
 
-  result = malloc (length + 1);
+  result = malloc(length + 1);
   int p = 0;
-
   for (i = 0; i < argc; ++i)
-	  {
-	    strcpy (result + p, strings[i]);
-	    p += strlen (strings[i]);
-	  }
+  {
+    strcpy(result + p, strings[i]);
+    p += strlen(strings[i]);
+  }
   result[p] = '\0';
 
 done:
   for (i = 0; i < argc; ++i)
-	  {
-	    free (strings[i]);
-	  }
-  free (strings);
-  return StringValue (result);
+  {
+    free(strings[i]);
+  }
+  free(strings);
+  return StringValue(result);
 }
 
 Value *
-IfElseFn (const char *name, State * state, int argc, Expr * argv[])
+IfElseFn(const char *name, State * state, int argc, Expr * argv[])
 {
   if (argc != 2 && argc != 3)
-	  {
-	    free (state->errmsg);
-	    state->errmsg = strdup ("ifelse expects 2 or 3 arguments");
-	    return NULL;
-	  }
-  char *cond = Evaluate (state, argv[0]);
-
+  {
+    free(state->errmsg);
+    state->errmsg = strdup("ifelse expects 2 or 3 arguments");
+    return NULL;
+  }
+  char *cond = Evaluate(state, argv[0]);
   if (cond == NULL)
-	  {
-	    return NULL;
-	  }
+  {
+    return NULL;
+  }
 
-  if (BooleanString (cond) == true)
-	  {
-	    free (cond);
-	    return EvaluateValue (state, argv[1]);
-	  }
+  if (BooleanString(cond) == true)
+  {
+    free(cond);
+    return EvaluateValue(state, argv[1]);
+  }
   else
-	  {
-	    if (argc == 3)
-		    {
-		      free (cond);
-		      return EvaluateValue (state, argv[2]);
-		    }
-	    else
-		    {
-		      return StringValue (cond);
-		    }
-	  }
+  {
+    if (argc == 3)
+    {
+      free(cond);
+      return EvaluateValue(state, argv[2]);
+    }
+    else
+    {
+      return StringValue(cond);
+    }
+  }
 }
 
 Value *
-AbortFn (const char *name, State * state, int argc, Expr * argv[])
+AbortFn(const char *name, State * state, int argc, Expr * argv[])
 {
   char *msg = NULL;
-
   if (argc > 0)
-	  {
-	    msg = Evaluate (state, argv[0]);
-	  }
-  free (state->errmsg);
+  {
+    msg = Evaluate(state, argv[0]);
+  }
+  free(state->errmsg);
   if (msg)
-	  {
-	    state->errmsg = msg;
-	  }
+  {
+    state->errmsg = msg;
+  }
   else
-	  {
-	    state->errmsg = strdup ("called abort()");
-	  }
+  {
+    state->errmsg = strdup("called abort()");
+  }
   return NULL;
 }
 
 Value *
-AssertFn (const char *name, State * state, int argc, Expr * argv[])
+AssertFn(const char *name, State * state, int argc, Expr * argv[])
 {
   int i;
-
   for (i = 0; i < argc; ++i)
-	  {
-	    char *v = Evaluate (state, argv[i]);
-
-	    if (v == NULL)
-		    {
-		      return NULL;
-		    }
-	    int b = BooleanString (v);
-
-	    free (v);
-	    if (!b)
-		    {
-		      int prefix_len;
-		      int len = argv[i]->end - argv[i]->start;
-		      char *err_src = malloc (len + 20);
-
-		      strcpy (err_src, "assert failed: ");
-		      prefix_len = strlen (err_src);
-		      memcpy (err_src + prefix_len,
-			      state->script + argv[i]->start, len);
-		      err_src[prefix_len + len] = '\0';
-		      free (state->errmsg);
-		      state->errmsg = err_src;
-		      return NULL;
-		    }
-	  }
-  return StringValue (strdup (""));
+  {
+    char *v = Evaluate(state, argv[i]);
+    if (v == NULL)
+    {
+      return NULL;
+    }
+    int b = BooleanString(v);
+    free(v);
+    if (!b)
+    {
+      int prefix_len;
+      int len = argv[i]->end - argv[i]->start;
+      char *err_src = malloc(len + 20);
+      strcpy(err_src, "assert failed: ");
+      prefix_len = strlen(err_src);
+      memcpy(err_src + prefix_len, state->script + argv[i]->start, len);
+      err_src[prefix_len + len] = '\0';
+      free(state->errmsg);
+      state->errmsg = err_src;
+      return NULL;
+    }
+  }
+  return StringValue(strdup(""));
 }
 
 Value *
-SleepFn (const char *name, State * state, int argc, Expr * argv[])
+SleepFn(const char *name, State * state, int argc, Expr * argv[])
 {
-  char *val = Evaluate (state, argv[0]);
-
+  char *val = Evaluate(state, argv[0]);
   if (val == NULL)
-	  {
-	    return NULL;
-	  }
-  int v = strtol (val, NULL, 10);
-
-  sleep (v);
-  return StringValue (val);
+  {
+    return NULL;
+  }
+  int v = strtol(val, NULL, 10);
+  sleep(v);
+  return StringValue(val);
 }
 
 Value *
-StdoutFn (const char *name, State * state, int argc, Expr * argv[])
+StdoutFn(const char *name, State * state, int argc, Expr * argv[])
 {
   int i;
-
   for (i = 0; i < argc; ++i)
-	  {
-	    char *v = Evaluate (state, argv[i]);
-
-	    if (v == NULL)
-		    {
-		      return NULL;
-		    }
-	    fputs (v, stdout);
-	    free (v);
-	  }
-  return StringValue (strdup (""));
+  {
+    char *v = Evaluate(state, argv[i]);
+    if (v == NULL)
+    {
+      return NULL;
+    }
+    fputs(v, stdout);
+    free(v);
+  }
+  return StringValue(strdup(""));
 }
 
 Value *
-LogicalAndFn (const char *name, State * state, int argc, Expr * argv[])
+LogicalAndFn(const char *name, State * state, int argc, Expr * argv[])
 {
-  char *left = Evaluate (state, argv[0]);
-
+  char *left = Evaluate(state, argv[0]);
   if (left == NULL)
     return NULL;
-  if (BooleanString (left) == true)
-	  {
-	    free (left);
-	    return EvaluateValue (state, argv[1]);
-	  }
+  if (BooleanString(left) == true)
+  {
+    free(left);
+    return EvaluateValue(state, argv[1]);
+  }
   else
-	  {
-	    return StringValue (left);
-	  }
+  {
+    return StringValue(left);
+  }
 }
 
 Value *
-LogicalOrFn (const char *name, State * state, int argc, Expr * argv[])
+LogicalOrFn(const char *name, State * state, int argc, Expr * argv[])
 {
-  char *left = Evaluate (state, argv[0]);
-
+  char *left = Evaluate(state, argv[0]);
   if (left == NULL)
     return NULL;
-  if (BooleanString (left) == false)
-	  {
-	    free (left);
-	    return EvaluateValue (state, argv[1]);
-	  }
+  if (BooleanString(left) == false)
+  {
+    free(left);
+    return EvaluateValue(state, argv[1]);
+  }
   else
-	  {
-	    return StringValue (left);
-	  }
+  {
+    return StringValue(left);
+  }
 }
 
 Value *
-LogicalNotFn (const char *name, State * state, int argc, Expr * argv[])
+LogicalNotFn(const char *name, State * state, int argc, Expr * argv[])
 {
-  char *val = Evaluate (state, argv[0]);
-
+  char *val = Evaluate(state, argv[0]);
   if (val == NULL)
     return NULL;
-  bool bv = BooleanString (val);
-
-  free (val);
-  return StringValue (strdup (bv ? "" : "t"));
+  bool bv = BooleanString(val);
+  free(val);
+  return StringValue(strdup(bv ? "" : "t"));
 }
 
 Value *
-SubstringFn (const char *name, State * state, int argc, Expr * argv[])
+SubstringFn(const char *name, State * state, int argc, Expr * argv[])
 {
-  char *needle = Evaluate (state, argv[0]);
-
+  char *needle = Evaluate(state, argv[0]);
   if (needle == NULL)
     return NULL;
-  char *haystack = Evaluate (state, argv[1]);
-
+  char *haystack = Evaluate(state, argv[1]);
   if (haystack == NULL)
-	  {
-	    free (needle);
-	    return NULL;
-	  }
+  {
+    free(needle);
+    return NULL;
+  }
 
-  char *result = strdup (strstr (haystack, needle) ? "t" : "");
-
-  free (needle);
-  free (haystack);
-  return StringValue (result);
+  char *result = strdup(strstr(haystack, needle) ? "t" : "");
+  free(needle);
+  free(haystack);
+  return StringValue(result);
 }
 
 Value *
-EqualityFn (const char *name, State * state, int argc, Expr * argv[])
+EqualityFn(const char *name, State * state, int argc, Expr * argv[])
 {
-  char *left = Evaluate (state, argv[0]);
-
+  char *left = Evaluate(state, argv[0]);
   if (left == NULL)
     return NULL;
-  char *right = Evaluate (state, argv[1]);
-
+  char *right = Evaluate(state, argv[1]);
   if (right == NULL)
-	  {
-	    free (left);
-	    return NULL;
-	  }
+  {
+    free(left);
+    return NULL;
+  }
 
-  char *result = strdup (strcmp (left, right) == 0 ? "t" : "");
-
-  free (left);
-  free (right);
-  return StringValue (result);
+  char *result = strdup(strcmp(left, right) == 0 ? "t" : "");
+  free(left);
+  free(right);
+  return StringValue(result);
 }
 
 Value *
-InequalityFn (const char *name, State * state, int argc, Expr * argv[])
+InequalityFn(const char *name, State * state, int argc, Expr * argv[])
 {
-  char *left = Evaluate (state, argv[0]);
-
+  char *left = Evaluate(state, argv[0]);
   if (left == NULL)
     return NULL;
-  char *right = Evaluate (state, argv[1]);
-
+  char *right = Evaluate(state, argv[1]);
   if (right == NULL)
-	  {
-	    free (left);
-	    return NULL;
-	  }
+  {
+    free(left);
+    return NULL;
+  }
 
-  char *result = strdup (strcmp (left, right) != 0 ? "t" : "");
-
-  free (left);
-  free (right);
-  return StringValue (result);
+  char *result = strdup(strcmp(left, right) != 0 ? "t" : "");
+  free(left);
+  free(right);
+  return StringValue(result);
 }
 
 Value *
-SequenceFn (const char *name, State * state, int argc, Expr * argv[])
+SequenceFn(const char *name, State * state, int argc, Expr * argv[])
 {
-  Value *left = EvaluateValue (state, argv[0]);
-
+  Value *left = EvaluateValue(state, argv[0]);
   if (left == NULL)
     return NULL;
-  FreeValue (left);
-  return EvaluateValue (state, argv[1]);
+  FreeValue(left);
+  return EvaluateValue(state, argv[1]);
 }
 
 Value *
-LessThanIntFn (const char *name, State * state, int argc, Expr * argv[])
+LessThanIntFn(const char *name, State * state, int argc, Expr * argv[])
 {
   if (argc != 2)
-	  {
-	    free (state->errmsg);
-	    state->errmsg = strdup ("less_than_int expects 2 arguments");
-	    return NULL;
-	  }
+  {
+    free(state->errmsg);
+    state->errmsg = strdup("less_than_int expects 2 arguments");
+    return NULL;
+  }
 
   char *left;
   char *right;
-
-  if (ReadArgs (state, argv, 2, &left, &right) < 0)
+  if (ReadArgs(state, argv, 2, &left, &right) < 0)
     return NULL;
 
   bool result = false;
   char *end;
 
-  long l_int = strtol (left, &end, 10);
-
+  long l_int = strtol(left, &end, 10);
   if (left[0] == '\0' || *end != '\0')
-	  {
-	    fprintf (stderr, "[%s] is not an int\n", left);
-	    goto done;
-	  }
+  {
+    fprintf(stderr, "[%s] is not an int\n", left);
+    goto done;
+  }
 
-  long r_int = strtol (right, &end, 10);
-
+  long r_int = strtol(right, &end, 10);
   if (right[0] == '\0' || *end != '\0')
-	  {
-	    fprintf (stderr, "[%s] is not an int\n", right);
-	    goto done;
-	  }
+  {
+    fprintf(stderr, "[%s] is not an int\n", right);
+    goto done;
+  }
 
   result = l_int < r_int;
 
 done:
-  free (left);
-  free (right);
-  return StringValue (strdup (result ? "t" : ""));
+  free(left);
+  free(right);
+  return StringValue(strdup(result ? "t" : ""));
 }
 
 Value *
-GreaterThanIntFn (const char *name, State * state, int argc, Expr * argv[])
+GreaterThanIntFn(const char *name, State * state, int argc, Expr * argv[])
 {
   if (argc != 2)
-	  {
-	    free (state->errmsg);
-	    state->errmsg = strdup ("greater_than_int expects 2 arguments");
-	    return NULL;
-	  }
+  {
+    free(state->errmsg);
+    state->errmsg = strdup("greater_than_int expects 2 arguments");
+    return NULL;
+  }
 
   Expr *temp[2];
-
   temp[0] = argv[1];
   temp[1] = argv[0];
 
-  return LessThanIntFn (name, state, 2, temp);
+  return LessThanIntFn(name, state, 2, temp);
 }
 
 Value *
-Literal (const char *name, State * state, int argc, Expr * argv[])
+Literal(const char *name, State * state, int argc, Expr * argv[])
 {
-  return StringValue (strdup (name));
+  return StringValue(strdup(name));
 }
 
 Expr *
-Build (Function fn, YYLTYPE loc, int count, ...)
+Build(Function fn, YYLTYPE loc, int count, ...)
 {
   va_list v;
-
-  va_start (v, count);
-  Expr *e = malloc (sizeof (Expr));
-
+  va_start(v, count);
+  Expr *e = malloc(sizeof(Expr));
   e->fn = fn;
   e->name = "(operator)";
   e->argc = count;
-  e->argv = malloc (count * sizeof (Expr *));
+  e->argv = malloc(count * sizeof(Expr *));
   int i;
-
   for (i = 0; i < count; ++i)
-	  {
-	    e->argv[i] = va_arg (v, Expr *);
-	  }
-  va_end (v);
+  {
+    e->argv[i] = va_arg(v, Expr *);
+  }
+  va_end(v);
   e->start = loc.start;
   e->end = loc.end;
   return e;
@@ -479,62 +440,59 @@ static int fn_size = 0;
 NamedFunction *fn_table = NULL;
 
 void
-RegisterFunction (const char *name, Function fn)
+RegisterFunction(const char *name, Function fn)
 {
   if (fn_entries >= fn_size)
-	  {
-	    fn_size = fn_size * 2 + 1;
-	    fn_table = realloc (fn_table, fn_size * sizeof (NamedFunction));
-	  }
+  {
+    fn_size = fn_size * 2 + 1;
+    fn_table = realloc(fn_table, fn_size * sizeof(NamedFunction));
+  }
   fn_table[fn_entries].name = name;
   fn_table[fn_entries].fn = fn;
   ++fn_entries;
 }
 
 static int
-fn_entry_compare (const void *a, const void *b)
+fn_entry_compare(const void *a, const void *b)
 {
   const char *na = ((const NamedFunction *) a)->name;
   const char *nb = ((const NamedFunction *) b)->name;
-
-  return strcmp (na, nb);
+  return strcmp(na, nb);
 }
 
 void
-FinishRegistration ()
+FinishRegistration()
 {
-  qsort (fn_table, fn_entries, sizeof (NamedFunction), fn_entry_compare);
+  qsort(fn_table, fn_entries, sizeof(NamedFunction), fn_entry_compare);
 }
 
 Function
-FindFunction (const char *name)
+FindFunction(const char *name)
 {
   NamedFunction key;
-
   key.name = name;
-  NamedFunction *nf = bsearch (&key, fn_table, fn_entries,
-			       sizeof (NamedFunction), fn_entry_compare);
-
+  NamedFunction *nf = bsearch(&key, fn_table, fn_entries,
+			      sizeof(NamedFunction), fn_entry_compare);
   if (nf == NULL)
-	  {
-	    return NULL;
-	  }
+  {
+    return NULL;
+  }
   return nf->fn;
 }
 
 void
-RegisterBuiltins ()
+RegisterBuiltins()
 {
-  RegisterFunction ("ifelse", IfElseFn);
-  RegisterFunction ("abort", AbortFn);
-  RegisterFunction ("assert", AssertFn);
-  RegisterFunction ("concat", ConcatFn);
-  RegisterFunction ("is_substring", SubstringFn);
-  RegisterFunction ("stdout", StdoutFn);
-  RegisterFunction ("sleep", SleepFn);
+  RegisterFunction("ifelse", IfElseFn);
+  RegisterFunction("abort", AbortFn);
+  RegisterFunction("assert", AssertFn);
+  RegisterFunction("concat", ConcatFn);
+  RegisterFunction("is_substring", SubstringFn);
+  RegisterFunction("stdout", StdoutFn);
+  RegisterFunction("sleep", SleepFn);
 
-  RegisterFunction ("less_than_int", LessThanIntFn);
-  RegisterFunction ("greater_than_int", GreaterThanIntFn);
+  RegisterFunction("less_than_int", LessThanIntFn);
+  RegisterFunction("greater_than_int", GreaterThanIntFn);
 }
 
 
@@ -546,33 +504,30 @@ RegisterBuiltins ()
 // zero or more char** to put them in).  If any expression evaluates
 // to NULL, free the rest and return -1.  Return 0 on success.
 int
-ReadArgs (State * state, Expr * argv[], int count, ...)
+ReadArgs(State * state, Expr * argv[], int count, ...)
 {
-  char **args = malloc (count * sizeof (char *));
+  char **args = malloc(count * sizeof(char *));
   va_list v;
-
-  va_start (v, count);
+  va_start(v, count);
   int i;
-
   for (i = 0; i < count; ++i)
-	  {
-	    args[i] = Evaluate (state, argv[i]);
-	    if (args[i] == NULL)
-		    {
-		      va_end (v);
-		      int j;
-
-		      for (j = 0; j < i; ++j)
-			      {
-				free (args[j]);
-			      }
-		      free (args);
-		      return -1;
-		    }
-	    *(va_arg (v, char **)) = args[i];
-	  }
-  va_end (v);
-  free (args);
+  {
+    args[i] = Evaluate(state, argv[i]);
+    if (args[i] == NULL)
+    {
+      va_end(v);
+      int j;
+      for (j = 0; j < i; ++j)
+      {
+	free(args[j]);
+      }
+      free(args);
+      return -1;
+    }
+    *(va_arg(v, char **)) = args[i];
+  }
+  va_end(v);
+  free(args);
   return 0;
 }
 
@@ -580,33 +535,30 @@ ReadArgs (State * state, Expr * argv[], int count, ...)
 // zero or more Value** to put them in).  If any expression evaluates
 // to NULL, free the rest and return -1.  Return 0 on success.
 int
-ReadValueArgs (State * state, Expr * argv[], int count, ...)
+ReadValueArgs(State * state, Expr * argv[], int count, ...)
 {
-  Value **args = malloc (count * sizeof (Value *));
+  Value **args = malloc(count * sizeof(Value *));
   va_list v;
-
-  va_start (v, count);
+  va_start(v, count);
   int i;
-
   for (i = 0; i < count; ++i)
-	  {
-	    args[i] = EvaluateValue (state, argv[i]);
-	    if (args[i] == NULL)
-		    {
-		      va_end (v);
-		      int j;
-
-		      for (j = 0; j < i; ++j)
-			      {
-				FreeValue (args[j]);
-			      }
-		      free (args);
-		      return -1;
-		    }
-	    *(va_arg (v, Value **)) = args[i];
-	  }
-  va_end (v);
-  free (args);
+  {
+    args[i] = EvaluateValue(state, argv[i]);
+    if (args[i] == NULL)
+    {
+      va_end(v);
+      int j;
+      for (j = 0; j < i; ++j)
+      {
+	FreeValue(args[j]);
+      }
+      free(args);
+      return -1;
+    }
+    *(va_arg(v, Value **)) = args[i];
+  }
+  va_end(v);
+  free(args);
   return 0;
 }
 
@@ -615,26 +567,24 @@ ReadValueArgs (State * state, Expr * argv[], int count, ...)
 // The caller is responsible for freeing the returned array and the
 // strings it contains.
 char **
-ReadVarArgs (State * state, int argc, Expr * argv[])
+ReadVarArgs(State * state, int argc, Expr * argv[])
 {
-  char **args = (char **) malloc (argc * sizeof (char *));
+  char **args = (char **) malloc(argc * sizeof(char *));
   int i = 0;
-
   for (i = 0; i < argc; ++i)
-	  {
-	    args[i] = Evaluate (state, argv[i]);
-	    if (args[i] == NULL)
-		    {
-		      int j;
-
-		      for (j = 0; j < i; ++j)
-			      {
-				free (args[j]);
-			      }
-		      free (args);
-		      return NULL;
-		    }
-	  }
+  {
+    args[i] = Evaluate(state, argv[i]);
+    if (args[i] == NULL)
+    {
+      int j;
+      for (j = 0; j < i; ++j)
+      {
+	free(args[j]);
+      }
+      free(args);
+      return NULL;
+    }
+  }
   return args;
 }
 
@@ -643,41 +593,38 @@ ReadVarArgs (State * state, int argc, Expr * argv[])
 // The caller is responsible for freeing the returned array and the
 // Values it contains.
 Value **
-ReadValueVarArgs (State * state, int argc, Expr * argv[])
+ReadValueVarArgs(State * state, int argc, Expr * argv[])
 {
-  Value **args = (Value **) malloc (argc * sizeof (Value *));
+  Value **args = (Value **) malloc(argc * sizeof(Value *));
   int i = 0;
-
   for (i = 0; i < argc; ++i)
-	  {
-	    args[i] = EvaluateValue (state, argv[i]);
-	    if (args[i] == NULL)
-		    {
-		      int j;
-
-		      for (j = 0; j < i; ++j)
-			      {
-				FreeValue (args[j]);
-			      }
-		      free (args);
-		      return NULL;
-		    }
-	  }
+  {
+    args[i] = EvaluateValue(state, argv[i]);
+    if (args[i] == NULL)
+    {
+      int j;
+      for (j = 0; j < i; ++j)
+      {
+	FreeValue(args[j]);
+      }
+      free(args);
+      return NULL;
+    }
+  }
   return args;
 }
 
 // Use printf-style arguments to compose an error message to put into
 // *state.  Returns NULL.
 Value *
-ErrorAbort (State * state, char *format, ...)
+ErrorAbort(State * state, char *format, ...)
 {
-  char *buffer = malloc (4096);
+  char *buffer = malloc(4096);
   va_list v;
-
-  va_start (v, format);
-  vsnprintf (buffer, 4096, format, v);
-  va_end (v);
-  free (state->errmsg);
+  va_start(v, format);
+  vsnprintf(buffer, 4096, format, v);
+  va_end(v);
+  free(state->errmsg);
   state->errmsg = buffer;
   return NULL;
 }

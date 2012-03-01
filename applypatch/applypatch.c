@@ -30,95 +30,108 @@
 #include "mtdutils/mtdutils.h"
 #include "edify/expr.h"
 
-static int SaveFileContents (const char *filename, FileContents file);
-static int LoadPartitionContents (const char *filename, FileContents * file);
-int ParseSha1 (const char *str, uint8_t * digest);
-static ssize_t FileSink (unsigned char *data, ssize_t len, void *token);
+int SaveFileContents(const char *filename, FileContents file);
+static int LoadPartitionContents(const char *filename, FileContents * file);
+int ParseSha1(const char *str, uint8_t * digest);
+static ssize_t FileSink(unsigned char *data, ssize_t len, void *token);
 
 static int mtd_partitions_scanned = 0;
 
-// Read a file into memory; store it and its associated metadata in
-// *file.  Return 0 on success.
+// Read a file into memory; optionally (retouch_flag == RETOUCH_DO_MASK) mask
+// the retouched entries back to their original value (such that SHA-1 checks
+// don't fail due to randomization); store the file contents and associated
+// metadata in *file.
+//
+// Return 0 on success.
 int
-LoadFileContents (const char *filename, FileContents * file)
+LoadFileContents(const char *filename, FileContents * file, int retouch_flag)
 {
   file->data = NULL;
 
   // A special 'filename' beginning with "MTD:" or "EMMC:" means to
   // load the contents of a partition.
-  if (strncmp (filename, "MTD:", 4) == 0 ||
-      strncmp (filename, "EMMC:", 5) == 0)
-	  {
-	    return LoadPartitionContents (filename, file);
-	  }
+  if (strncmp(filename, "MTD:", 4) == 0 || strncmp(filename, "EMMC:", 5) == 0)
+  {
+    return LoadPartitionContents(filename, file);
+  }
 
-  if (stat (filename, &file->st) != 0)
-	  {
-	    printf ("failed to stat \"%s\": %s\n", filename,
-		    strerror (errno));
-	    return -1;
-	  }
+  if (stat(filename, &file->st) != 0)
+  {
+    printf("failed to stat \"%s\": %s\n", filename, strerror(errno));
+    return -1;
+  }
 
   file->size = file->st.st_size;
-  file->data = malloc (file->size);
+  file->data = malloc(file->size);
 
-  FILE *f = fopen (filename, "rb");
-
+  FILE *f = fopen(filename, "rb");
   if (f == NULL)
-	  {
-	    printf ("failed to open \"%s\": %s\n", filename,
-		    strerror (errno));
-	    free (file->data);
-	    file->data = NULL;
-	    return -1;
-	  }
+  {
+    printf("failed to open \"%s\": %s\n", filename, strerror(errno));
+    free(file->data);
+    file->data = NULL;
+    return -1;
+  }
 
-  ssize_t bytes_read = fread (file->data, 1, file->size, f);
-
+  ssize_t bytes_read = fread(file->data, 1, file->size, f);
   if (bytes_read != file->size)
-	  {
-	    printf ("short read of \"%s\" (%ld bytes of %ld)\n",
-		    filename, (long) bytes_read, (long) file->size);
-	    free (file->data);
-	    file->data = NULL;
-	    return -1;
-	  }
-  fclose (f);
+  {
+    printf("short read of \"%s\" (%ld bytes of %ld)\n",
+	   filename, (long) bytes_read, (long) file->size);
+    free(file->data);
+    file->data = NULL;
+    return -1;
+  }
+  fclose(f);
 
-  SHA (file->data, file->size, file->sha1);
+  // apply_patch[_check] functions are blind to randomization. Randomization
+  // is taken care of in [Undo]RetouchBinariesFn. If there is a mismatch
+  // within a file, this means the file is assumed "corrupt" for simplicity.
+  if (retouch_flag)
+  {
+    int32_t desired_offset = 0;
+    if (retouch_mask_data(file->data, file->size,
+			  &desired_offset, NULL) != RETOUCH_DATA_MATCHED)
+    {
+      printf("error trying to mask retouch entries\n");
+      free(file->data);
+      file->data = NULL;
+      return -1;
+    }
+  }
+
+  SHA(file->data, file->size, file->sha1);
   return 0;
 }
 
 static size_t *size_array;
-
 // comparison function for qsort()ing an int array of indexes into
 // size_array[].
 static int
-compare_size_indices (const void *a, const void *b)
+compare_size_indices(const void *a, const void *b)
 {
   int aa = *(int *) a;
   int bb = *(int *) b;
-
   if (size_array[aa] < size_array[bb])
-	  {
-	    return -1;
-	  }
+  {
+    return -1;
+  }
   else if (size_array[aa] > size_array[bb])
-	  {
-	    return 1;
-	  }
+  {
+    return 1;
+  }
   else
-	  {
-	    return 0;
-	  }
+  {
+    return 0;
+  }
 }
 
 void
-FreeFileContents (FileContents * file)
+FreeFileContents(FileContents * file)
 {
   if (file)
-    free (file->data);
-  free (file);
+    free(file->data);
+  free(file);
 }
 
 // Load the contents of an MTD or EMMC partition into the provided
@@ -140,223 +153,208 @@ enum PartitionType
 { MTD, EMMC };
 
 static int
-LoadPartitionContents (const char *filename, FileContents * file)
+LoadPartitionContents(const char *filename, FileContents * file)
 {
-  char *copy = strdup (filename);
-  const char *magic = strtok (copy, ":");
+  char *copy = strdup(filename);
+  const char *magic = strtok(copy, ":");
 
   enum PartitionType type;
 
-  if (strcmp (magic, "MTD") == 0)
-	  {
-	    type = MTD;
-	  }
-  else if (strcmp (magic, "EMMC") == 0)
-	  {
-	    type = EMMC;
-	  }
+  if (strcmp(magic, "MTD") == 0)
+  {
+    type = MTD;
+  }
+  else if (strcmp(magic, "EMMC") == 0)
+  {
+    type = EMMC;
+  }
   else
-	  {
-	    printf ("LoadPartitionContents called with bad filename (%s)\n",
-		    filename);
-	    return -1;
-	  }
-  const char *partition = strtok (NULL, ":");
+  {
+    printf("LoadPartitionContents called with bad filename (%s)\n", filename);
+    return -1;
+  }
+  const char *partition = strtok(NULL, ":");
 
   int i;
   int colons = 0;
-
   for (i = 0; filename[i] != '\0'; ++i)
-	  {
-	    if (filename[i] == ':')
-		    {
-		      ++colons;
-		    }
-	  }
+  {
+    if (filename[i] == ':')
+    {
+      ++colons;
+    }
+  }
   if (colons < 3 || colons % 2 == 0)
-	  {
-	    printf ("LoadPartitionContents called with bad filename (%s)\n",
-		    filename);
-	  }
+  {
+    printf("LoadPartitionContents called with bad filename (%s)\n", filename);
+  }
 
   int pairs = (colons - 1) / 2;	// # of (size,sha1) pairs in filename
-  int *index = malloc (pairs * sizeof (int));
-  size_t *size = malloc (pairs * sizeof (size_t));
-  char **sha1sum = malloc (pairs * sizeof (char *));
+  int *index = malloc(pairs * sizeof(int));
+  size_t *size = malloc(pairs * sizeof(size_t));
+  char **sha1sum = malloc(pairs * sizeof(char *));
 
   for (i = 0; i < pairs; ++i)
-	  {
-	    const char *size_str = strtok (NULL, ":");
-
-	    size[i] = strtol (size_str, NULL, 10);
-	    if (size[i] == 0)
-		    {
-		      printf
-			("LoadPartitionContents called with bad size (%s)\n",
-			 filename);
-		      return -1;
-		    }
-	    sha1sum[i] = strtok (NULL, ":");
-	    index[i] = i;
-	  }
+  {
+    const char *size_str = strtok(NULL, ":");
+    size[i] = strtol(size_str, NULL, 10);
+    if (size[i] == 0)
+    {
+      printf("LoadPartitionContents called with bad size (%s)\n", filename);
+      return -1;
+    }
+    sha1sum[i] = strtok(NULL, ":");
+    index[i] = i;
+  }
 
   // sort the index[] array so it indexes the pairs in order of
   // increasing size.
   size_array = size;
-  qsort (index, pairs, sizeof (int), compare_size_indices);
+  qsort(index, pairs, sizeof(int), compare_size_indices);
 
   MtdReadContext *ctx = NULL;
   FILE *dev = NULL;
 
   switch (type)
-	  {
-	  case MTD:
-	    if (!mtd_partitions_scanned)
-		    {
-		      mtd_scan_partitions ();
-		      mtd_partitions_scanned = 1;
-		    }
+  {
+  case MTD:
+    if (!mtd_partitions_scanned)
+    {
+      mtd_scan_partitions();
+      mtd_partitions_scanned = 1;
+    }
 
-	    const MtdPartition *mtd = mtd_find_partition_by_name (partition);
+    const MtdPartition *mtd = mtd_find_partition_by_name(partition);
+    if (mtd == NULL)
+    {
+      printf("mtd partition \"%s\" not found (loading %s)\n",
+	     partition, filename);
+      return -1;
+    }
 
-	    if (mtd == NULL)
-		    {
-		      printf ("mtd partition \"%s\" not found (loading %s)\n",
-			      partition, filename);
-		      return -1;
-		    }
+    ctx = mtd_read_partition(mtd);
+    if (ctx == NULL)
+    {
+      printf("failed to initialize read of mtd partition \"%s\"\n",
+	     partition);
+      return -1;
+    }
+    break;
 
-	    ctx = mtd_read_partition (mtd);
-	    if (ctx == NULL)
-		    {
-		      printf
-			("failed to initialize read of mtd partition \"%s\"\n",
-			 partition);
-		      return -1;
-		    }
-	    break;
-
-	  case EMMC:
-	    dev = fopen (partition, "rb");
-	    if (dev == NULL)
-		    {
-		      printf ("failed to open emmc partition \"%s\": %s\n",
-			      partition, strerror (errno));
-		      return -1;
-		    }
-	  }
+  case EMMC:
+    dev = fopen(partition, "rb");
+    if (dev == NULL)
+    {
+      printf("failed to open emmc partition \"%s\": %s\n",
+	     partition, strerror(errno));
+      return -1;
+    }
+  }
 
   SHA_CTX sha_ctx;
-
-  SHA_init (&sha_ctx);
+  SHA_init(&sha_ctx);
   uint8_t parsed_sha[SHA_DIGEST_SIZE];
 
   // allocate enough memory to hold the largest size.
-  file->data = malloc (size[index[pairs - 1]]);
+  file->data = malloc(size[index[pairs - 1]]);
   char *p = (char *) file->data;
-
   file->size = 0;		// # bytes read so far
 
   for (i = 0; i < pairs; ++i)
-	  {
-	    // Read enough additional bytes to get us up to the next size
-	    // (again, we're trying the possibilities in order of increasing
-	    // size).
-	    size_t next = size[index[i]] - file->size;
-	    size_t read = 0;
+  {
+    // Read enough additional bytes to get us up to the next size
+    // (again, we're trying the possibilities in order of increasing
+    // size).
+    size_t next = size[index[i]] - file->size;
+    size_t read = 0;
+    if (next > 0)
+    {
+      switch (type)
+      {
+      case MTD:
+	read = mtd_read_data(ctx, p, next);
+	break;
 
-	    if (next > 0)
-		    {
-		      switch (type)
-			      {
-			      case MTD:
-				read = mtd_read_data (ctx, p, next);
-				break;
+      case EMMC:
+	read = fread(p, 1, next, dev);
+	break;
+      }
+      if (next != read)
+      {
+	printf("short read (%d bytes of %d) for partition \"%s\"\n",
+	       read, next, partition);
+	free(file->data);
+	file->data = NULL;
+	return -1;
+      }
+      SHA_update(&sha_ctx, p, read);
+      file->size += read;
+    }
 
-			      case EMMC:
-				read = fread (p, 1, next, dev);
-				break;
-			      }
-		      if (next != read)
-			      {
-				printf
-				  ("short read (%d bytes of %d) for partition \"%s\"\n",
-				   read, next, partition);
-				free (file->data);
-				file->data = NULL;
-				return -1;
-			      }
-		      SHA_update (&sha_ctx, p, read);
-		      file->size += read;
-		    }
+    // Duplicate the SHA context and finalize the duplicate so we can
+    // check it against this pair's expected hash.
+    SHA_CTX temp_ctx;
+    memcpy(&temp_ctx, &sha_ctx, sizeof(SHA_CTX));
+    const uint8_t *sha_so_far = SHA_final(&temp_ctx);
 
-	    // Duplicate the SHA context and finalize the duplicate so we can
-	    // check it against this pair's expected hash.
-	    SHA_CTX temp_ctx;
+    if (ParseSha1(sha1sum[index[i]], parsed_sha) != 0)
+    {
+      printf("failed to parse sha1 %s in %s\n", sha1sum[index[i]], filename);
+      free(file->data);
+      file->data = NULL;
+      return -1;
+    }
 
-	    memcpy (&temp_ctx, &sha_ctx, sizeof (SHA_CTX));
-	    const uint8_t *sha_so_far = SHA_final (&temp_ctx);
+    if (memcmp(sha_so_far, parsed_sha, SHA_DIGEST_SIZE) == 0)
+    {
+      // we have a match.  stop reading the partition; we'll return
+      // the data we've read so far.
+      printf("partition read matched size %d sha %s\n",
+	     size[index[i]], sha1sum[index[i]]);
+      break;
+    }
 
-	    if (ParseSha1 (sha1sum[index[i]], parsed_sha) != 0)
-		    {
-		      printf ("failed to parse sha1 %s in %s\n",
-			      sha1sum[index[i]], filename);
-		      free (file->data);
-		      file->data = NULL;
-		      return -1;
-		    }
-
-	    if (memcmp (sha_so_far, parsed_sha, SHA_DIGEST_SIZE) == 0)
-		    {
-		      // we have a match.  stop reading the partition; we'll return
-		      // the data we've read so far.
-		      printf ("partition read matched size %d sha %s\n",
-			      size[index[i]], sha1sum[index[i]]);
-		      break;
-		    }
-
-	    p += read;
-	  }
+    p += read;
+  }
 
   switch (type)
-	  {
-	  case MTD:
-	    mtd_read_close (ctx);
-	    break;
+  {
+  case MTD:
+    mtd_read_close(ctx);
+    break;
 
-	  case EMMC:
-	    fclose (dev);
-	    break;
-	  }
+  case EMMC:
+    fclose(dev);
+    break;
+  }
 
 
   if (i == pairs)
-	  {
-	    // Ran off the end of the list of (size,sha1) pairs without
-	    // finding a match.
-	    printf ("contents of partition \"%s\" didn't match %s\n",
-		    partition, filename);
-	    free (file->data);
-	    file->data = NULL;
-	    return -1;
-	  }
+  {
+    // Ran off the end of the list of (size,sha1) pairs without
+    // finding a match.
+    printf("contents of partition \"%s\" didn't match %s\n",
+	   partition, filename);
+    free(file->data);
+    file->data = NULL;
+    return -1;
+  }
 
-  const uint8_t *sha_final = SHA_final (&sha_ctx);
-
+  const uint8_t *sha_final = SHA_final(&sha_ctx);
   for (i = 0; i < SHA_DIGEST_SIZE; ++i)
-	  {
-	    file->sha1[i] = sha_final[i];
-	  }
+  {
+    file->sha1[i] = sha_final[i];
+  }
 
   // Fake some stat() info.
   file->st.st_mode = 0644;
   file->st.st_uid = 0;
   file->st.st_gid = 0;
 
-  free (copy);
-  free (index);
-  free (size);
-  free (sha1sum);
+  free(copy);
+  free(index);
+  free(size);
+  free(sha1sum);
 
   return 0;
 }
@@ -364,43 +362,38 @@ LoadPartitionContents (const char *filename, FileContents * file)
 
 // Save the contents of the given FileContents object under the given
 // filename.  Return 0 on success.
-static int
-SaveFileContents (const char *filename, FileContents file)
+int
+SaveFileContents(const char *filename, FileContents file)
 {
-  int fd = open (filename, O_WRONLY | O_CREAT | O_TRUNC);
-
+  int fd = open(filename, O_WRONLY | O_CREAT | O_TRUNC);
   if (fd < 0)
-	  {
-	    printf ("failed to open \"%s\" for write: %s\n",
-		    filename, strerror (errno));
-	    return -1;
-	  }
+  {
+    printf("failed to open \"%s\" for write: %s\n",
+	   filename, strerror(errno));
+    return -1;
+  }
 
-  ssize_t bytes_written = FileSink (file.data, file.size, &fd);
-
+  ssize_t bytes_written = FileSink(file.data, file.size, &fd);
   if (bytes_written != file.size)
-	  {
-	    printf ("short write of \"%s\" (%ld bytes of %ld) (%s)\n",
-		    filename, (long) bytes_written, (long) file.size,
-		    strerror (errno));
-	    close (fd);
-	    return -1;
-	  }
-  fsync (fd);
-  close (fd);
+  {
+    printf("short write of \"%s\" (%ld bytes of %ld) (%s)\n",
+	   filename, (long) bytes_written, (long) file.size, strerror(errno));
+    close(fd);
+    return -1;
+  }
+  fsync(fd);
+  close(fd);
 
-  if (chmod (filename, file.st.st_mode) != 0)
-	  {
-	    printf ("chmod of \"%s\" failed: %s\n", filename,
-		    strerror (errno));
-	    return -1;
-	  }
-  if (chown (filename, file.st.st_uid, file.st.st_gid) != 0)
-	  {
-	    printf ("chown of \"%s\" failed: %s\n", filename,
-		    strerror (errno));
-	    return -1;
-	  }
+  if (chmod(filename, file.st.st_mode) != 0)
+  {
+    printf("chmod of \"%s\" failed: %s\n", filename, strerror(errno));
+    return -1;
+  }
+  if (chown(filename, file.st.st_uid, file.st.st_gid) != 0)
+  {
+    printf("chown of \"%s\" failed: %s\n", filename, strerror(errno));
+    return -1;
+  }
 
   return 0;
 }
@@ -409,106 +402,96 @@ SaveFileContents (const char *filename, FileContents file)
 // "MTD:<partition>[:...]" or "EMMC:<partition_device>:".  Return 0 on
 // success.
 int
-WriteToPartition (unsigned char *data, size_t len, const char *target)
+WriteToPartition(unsigned char *data, size_t len, const char *target)
 {
-  char *copy = strdup (target);
-  const char *magic = strtok (copy, ":");
+  char *copy = strdup(target);
+  const char *magic = strtok(copy, ":");
 
   enum PartitionType type;
-
-  if (strcmp (magic, "MTD") == 0)
-	  {
-	    type = MTD;
-	  }
-  else if (strcmp (magic, "EMMC") == 0)
-	  {
-	    type = EMMC;
-	  }
+  if (strcmp(magic, "MTD") == 0)
+  {
+    type = MTD;
+  }
+  else if (strcmp(magic, "EMMC") == 0)
+  {
+    type = EMMC;
+  }
   else
-	  {
-	    printf ("WriteToPartition called with bad target (%s)\n", target);
-	    return -1;
-	  }
-  const char *partition = strtok (NULL, ":");
+  {
+    printf("WriteToPartition called with bad target (%s)\n", target);
+    return -1;
+  }
+  const char *partition = strtok(NULL, ":");
 
   if (partition == NULL)
-	  {
-	    printf ("bad partition target name \"%s\"\n", target);
-	    return -1;
-	  }
+  {
+    printf("bad partition target name \"%s\"\n", target);
+    return -1;
+  }
 
   switch (type)
-	  {
-	  case MTD:
-	    if (!mtd_partitions_scanned)
-		    {
-		      mtd_scan_partitions ();
-		      mtd_partitions_scanned = 1;
-		    }
+  {
+  case MTD:
+    if (!mtd_partitions_scanned)
+    {
+      mtd_scan_partitions();
+      mtd_partitions_scanned = 1;
+    }
 
-	    const MtdPartition *mtd = mtd_find_partition_by_name (partition);
+    const MtdPartition *mtd = mtd_find_partition_by_name(partition);
+    if (mtd == NULL)
+    {
+      printf("mtd partition \"%s\" not found for writing\n", partition);
+      return -1;
+    }
 
-	    if (mtd == NULL)
-		    {
-		      printf ("mtd partition \"%s\" not found for writing\n",
-			      partition);
-		      return -1;
-		    }
+    MtdWriteContext *ctx = mtd_write_partition(mtd);
+    if (ctx == NULL)
+    {
+      printf("failed to init mtd partition \"%s\" for writing\n", partition);
+      return -1;
+    }
 
-	    MtdWriteContext *ctx = mtd_write_partition (mtd);
+    size_t written = mtd_write_data(ctx, (char *) data, len);
+    if (written != len)
+    {
+      printf("only wrote %d of %d bytes to MTD %s\n",
+	     written, len, partition);
+      mtd_write_close(ctx);
+      return -1;
+    }
 
-	    if (ctx == NULL)
-		    {
-		      printf
-			("failed to init mtd partition \"%s\" for writing\n",
-			 partition);
-		      return -1;
-		    }
+    if (mtd_erase_blocks(ctx, -1) < 0)
+    {
+      printf("error finishing mtd write of %s\n", partition);
+      mtd_write_close(ctx);
+      return -1;
+    }
 
-	    size_t written = mtd_write_data (ctx, (char *) data, len);
+    if (mtd_write_close(ctx))
+    {
+      printf("error closing mtd write of %s\n", partition);
+      return -1;
+    }
+    break;
 
-	    if (written != len)
-		    {
-		      printf ("only wrote %d of %d bytes to MTD %s\n",
-			      written, len, partition);
-		      mtd_write_close (ctx);
-		      return -1;
-		    }
+  case EMMC:
+    ;
+    FILE *f = fopen(partition, "wb");
+    if (fwrite(data, 1, len, f) != len)
+    {
+      printf("short write writing to %s (%s)\n", partition, strerror(errno));
+      return -1;
+    }
+    if (fclose(f) != 0)
+    {
+      printf("error closing %s (%s)\n", partition, strerror(errno));
+      return -1;
+    }
+    break;
+  }
 
-	    if (mtd_erase_blocks (ctx, -1) < 0)
-		    {
-		      printf ("error finishing mtd write of %s\n", partition);
-		      mtd_write_close (ctx);
-		      return -1;
-		    }
-
-	    if (mtd_write_close (ctx))
-		    {
-		      printf ("error closing mtd write of %s\n", partition);
-		      return -1;
-		    }
-	    break;
-
-	  case EMMC:
-	    ;
-	    FILE *f = fopen (partition, "wb");
-
-	    if (fwrite (data, 1, len, f) != len)
-		    {
-		      printf ("short write writing to %s (%s)\n",
-			      partition, strerror (errno));
-		      return -1;
-		    }
-	    if (fclose (f) != 0)
-		    {
-		      printf ("error closing %s (%s)\n", partition,
-			      strerror (errno));
-		      return -1;
-		    }
-	    break;
-	  }
-
-  free (copy);
+  free(copy);
   return 0;
 }
 
@@ -518,42 +501,40 @@ WriteToPartition (unsigned char *data, size_t len, const char *target)
 // the form "<digest>:<anything>".  Return 0 on success, -1 on any
 // error.
 int
-ParseSha1 (const char *str, uint8_t * digest)
+ParseSha1(const char *str, uint8_t * digest)
 {
   int i;
   const char *ps = str;
   uint8_t *pd = digest;
-
   for (i = 0; i < SHA_DIGEST_SIZE * 2; ++i, ++ps)
-	  {
-	    int digit;
-
-	    if (*ps >= '0' && *ps <= '9')
-		    {
-		      digit = *ps - '0';
-		    }
-	    else if (*ps >= 'a' && *ps <= 'f')
-		    {
-		      digit = *ps - 'a' + 10;
-		    }
-	    else if (*ps >= 'A' && *ps <= 'F')
-		    {
-		      digit = *ps - 'A' + 10;
-		    }
-	    else
-		    {
-		      return -1;
-		    }
-	    if (i % 2 == 0)
-		    {
-		      *pd = digit << 4;
-		    }
-	    else
-		    {
-		      *pd |= digit;
-		      ++pd;
-		    }
-	  }
+  {
+    int digit;
+    if (*ps >= '0' && *ps <= '9')
+    {
+      digit = *ps - '0';
+    }
+    else if (*ps >= 'a' && *ps <= 'f')
+    {
+      digit = *ps - 'a' + 10;
+    }
+    else if (*ps >= 'A' && *ps <= 'F')
+    {
+      digit = *ps - 'A' + 10;
+    }
+    else
+    {
+      return -1;
+    }
+    if (i % 2 == 0)
+    {
+      *pd = digit << 4;
+    }
+    else
+    {
+      *pd |= digit;
+      ++pd;
+    }
+  }
   if (*ps != '\0')
     return -1;
   return 0;
@@ -563,20 +544,19 @@ ParseSha1 (const char *str, uint8_t * digest)
 // Return the index of the match on success, or -1 if no match is
 // found.
 int
-FindMatchingPatch (uint8_t * sha1, char **const patch_sha1_str,
-		   int num_patches)
+FindMatchingPatch(uint8_t * sha1, char **const patch_sha1_str,
+		  int num_patches)
 {
   int i;
   uint8_t patch_sha1[SHA_DIGEST_SIZE];
-
   for (i = 0; i < num_patches; ++i)
-	  {
-	    if (ParseSha1 (patch_sha1_str[i], patch_sha1) == 0 &&
-		memcmp (patch_sha1, sha1, SHA_DIGEST_SIZE) == 0)
-		    {
-		      return i;
-		    }
-	  }
+  {
+    if (ParseSha1(patch_sha1_str[i], patch_sha1) == 0 &&
+	memcmp(patch_sha1, sha1, SHA_DIGEST_SIZE) == 0)
+    {
+      return i;
+    }
+  }
   return -1;
 }
 
@@ -584,77 +564,73 @@ FindMatchingPatch (uint8_t * sha1, char **const patch_sha1_str,
 // match any of the sha1's on the command line (argv[3:]).  Returns
 // nonzero otherwise.
 int
-applypatch_check (const char *filename,
-		  int num_patches, char **const patch_sha1_str)
+applypatch_check(const char *filename,
+		 int num_patches, char **const patch_sha1_str)
 {
   FileContents file;
-
   file.data = NULL;
 
   // It's okay to specify no sha1s; the check will pass if the
   // LoadFileContents is successful.  (Useful for reading
   // partitions, where the filename encodes the sha1s; no need to
   // check them twice.)
-  if (LoadFileContents (filename, &file) != 0 ||
+  if (LoadFileContents(filename, &file, RETOUCH_DO_MASK) != 0 ||
       (num_patches > 0 &&
-       FindMatchingPatch (file.sha1, patch_sha1_str, num_patches) < 0))
-	  {
-	    printf ("file \"%s\" doesn't have any of expected "
-		    "sha1 sums; checking cache\n", filename);
+       FindMatchingPatch(file.sha1, patch_sha1_str, num_patches) < 0))
+  {
+    printf("file \"%s\" doesn't have any of expected "
+	   "sha1 sums; checking cache\n", filename);
 
-	    free (file.data);
+    free(file.data);
 
-	    // If the source file is missing or corrupted, it might be because
-	    // we were killed in the middle of patching it.  A copy of it
-	    // should have been made in CACHE_TEMP_SOURCE.  If that file
-	    // exists and matches the sha1 we're looking for, the check still
-	    // passes.
+    // If the source file is missing or corrupted, it might be because
+    // we were killed in the middle of patching it.  A copy of it
+    // should have been made in CACHE_TEMP_SOURCE.  If that file
+    // exists and matches the sha1 we're looking for, the check still
+    // passes.
 
-	    if (LoadFileContents (CACHE_TEMP_SOURCE, &file) != 0)
-		    {
-		      printf ("failed to load cache file\n");
-		      return 1;
-		    }
+    if (LoadFileContents(CACHE_TEMP_SOURCE, &file, RETOUCH_DO_MASK) != 0)
+    {
+      printf("failed to load cache file\n");
+      return 1;
+    }
 
-	    if (FindMatchingPatch (file.sha1, patch_sha1_str, num_patches) <
-		0)
-		    {
-		      printf ("cache bits don't match any sha1 for \"%s\"\n",
-			      filename);
-		      free (file.data);
-		      return 1;
-		    }
-	  }
+    if (FindMatchingPatch(file.sha1, patch_sha1_str, num_patches) < 0)
+    {
+      printf("cache bits don't match any sha1 for \"%s\"\n", filename);
+      free(file.data);
+      return 1;
+    }
+  }
 
-  free (file.data);
+  free(file.data);
   return 0;
 }
 
 int
-ShowLicenses ()
+ShowLicenses()
 {
-  ShowBSDiffLicense ();
+  ShowBSDiffLicense();
   return 0;
 }
 
 ssize_t
-FileSink (unsigned char *data, ssize_t len, void *token)
+FileSink(unsigned char *data, ssize_t len, void *token)
 {
   int fd = *(int *) token;
   ssize_t done = 0;
   ssize_t wrote;
-
   while (done < (ssize_t) len)
-	  {
-	    wrote = write (fd, data + done, len - done);
-	    if (wrote <= 0)
-		    {
-		      printf ("error writing %d bytes: %s\n",
-			      (int) (len - done), strerror (errno));
-		      return done;
-		    }
-	    done += wrote;
-	  }
+  {
+    wrote = write(fd, data + done, len - done);
+    if (wrote <= 0)
+    {
+      printf("error writing %d bytes: %s\n", (int) (len - done),
+	     strerror(errno));
+      return done;
+    }
+    done += wrote;
+  }
   return done;
 }
 
@@ -666,15 +642,14 @@ typedef struct
 } MemorySinkInfo;
 
 ssize_t
-MemorySink (unsigned char *data, ssize_t len, void *token)
+MemorySink(unsigned char *data, ssize_t len, void *token)
 {
   MemorySinkInfo *msi = (MemorySinkInfo *) token;
-
   if (msi->size - msi->pos < len)
-	  {
-	    return -1;
-	  }
-  memcpy (msi->buffer + msi->pos, data, len);
+  {
+    return -1;
+  }
+  memcpy(msi->buffer + msi->pos, data, len);
   msi->pos += len;
   return len;
 }
@@ -682,31 +657,29 @@ MemorySink (unsigned char *data, ssize_t len, void *token)
 // Return the amount of free space (in bytes) on the filesystem
 // containing filename.  filename must exist.  Return -1 on error.
 size_t
-FreeSpaceForFile (const char *filename)
+FreeSpaceForFile(const char *filename)
 {
   struct statfs sf;
-
-  if (statfs (filename, &sf) != 0)
-	  {
-	    printf ("failed to statfs %s: %s\n", filename, strerror (errno));
-	    return -1;
-	  }
+  if (statfs(filename, &sf) != 0)
+  {
+    printf("failed to statfs %s: %s\n", filename, strerror(errno));
+    return -1;
+  }
   return sf.f_bsize * sf.f_bfree;
 }
 
 int
-CacheSizeCheck (size_t bytes)
+CacheSizeCheck(size_t bytes)
 {
-  if (MakeFreeSpaceOnCache (bytes) < 0)
-	  {
-	    printf ("unable to make %ld bytes available on /cache\n",
-		    (long) bytes);
-	    return 1;
-	  }
+  if (MakeFreeSpaceOnCache(bytes) < 0)
+  {
+    printf("unable to make %ld bytes available on /cache\n", (long) bytes);
+    return 1;
+  }
   else
-	  {
-	    return 0;
-	  }
+  {
+    return 0;
+  }
 }
 
 
@@ -737,26 +710,25 @@ CacheSizeCheck (size_t bytes)
 // for the format of such a filename.
 
 int
-applypatch (const char *source_filename,
-	    const char *target_filename,
-	    const char *target_sha1_str,
-	    size_t target_size,
-	    int num_patches, char **const patch_sha1_str, Value ** patch_data)
+applypatch(const char *source_filename,
+	   const char *target_filename,
+	   const char *target_sha1_str,
+	   size_t target_size,
+	   int num_patches, char **const patch_sha1_str, Value ** patch_data)
 {
-  printf ("\napplying patch to %s\n", source_filename);
+  printf("\napplying patch to %s\n", source_filename);
 
   if (target_filename[0] == '-' && target_filename[1] == '\0')
-	  {
-	    target_filename = source_filename;
-	  }
+  {
+    target_filename = source_filename;
+  }
 
   uint8_t target_sha1[SHA_DIGEST_SIZE];
-
-  if (ParseSha1 (target_sha1_str, target_sha1) != 0)
-	  {
-	    printf ("failed to parse tgt-sha1 \"%s\"\n", target_sha1_str);
-	    return 1;
-	  }
+  if (ParseSha1(target_sha1_str, target_sha1) != 0)
+  {
+    printf("failed to parse tgt-sha1 \"%s\"\n", target_sha1_str);
+    return 1;
+  }
 
   FileContents copy_file;
   FileContents source_file;
@@ -765,67 +737,63 @@ applypatch (const char *source_filename,
   int made_copy = 0;
 
   // We try to load the target file into the source_file object.
-  if (LoadFileContents (target_filename, &source_file) == 0)
-	  {
-	    if (memcmp (source_file.sha1, target_sha1, SHA_DIGEST_SIZE) == 0)
-		    {
-		      // The early-exit case:  the patch was already applied, this file
-		      // has the desired hash, nothing for us to do.
-		      printf ("\"%s\" is already target; no patch needed\n",
-			      target_filename);
-		      return 0;
-		    }
-	  }
+  if (LoadFileContents(target_filename, &source_file, RETOUCH_DO_MASK) == 0)
+  {
+    if (memcmp(source_file.sha1, target_sha1, SHA_DIGEST_SIZE) == 0)
+    {
+      // The early-exit case:  the patch was already applied, this file
+      // has the desired hash, nothing for us to do.
+      printf("\"%s\" is already target; no patch needed\n", target_filename);
+      return 0;
+    }
+  }
 
   if (source_file.data == NULL ||
       (target_filename != source_filename &&
-       strcmp (target_filename, source_filename) != 0))
-	  {
-	    // Need to load the source file:  either we failed to load the
-	    // target file, or we did but it's different from the source file.
-	    free (source_file.data);
-	    LoadFileContents (source_filename, &source_file);
-	  }
+       strcmp(target_filename, source_filename) != 0))
+  {
+    // Need to load the source file:  either we failed to load the
+    // target file, or we did but it's different from the source file.
+    free(source_file.data);
+    LoadFileContents(source_filename, &source_file, RETOUCH_DO_MASK);
+  }
 
   if (source_file.data != NULL)
-	  {
-	    int to_use = FindMatchingPatch (source_file.sha1,
-					    patch_sha1_str, num_patches);
-
-	    if (to_use >= 0)
-		    {
-		      source_patch_value = patch_data[to_use];
-		    }
-	  }
+  {
+    int to_use = FindMatchingPatch(source_file.sha1,
+				   patch_sha1_str, num_patches);
+    if (to_use >= 0)
+    {
+      source_patch_value = patch_data[to_use];
+    }
+  }
 
   if (source_patch_value == NULL)
-	  {
-	    free (source_file.data);
-	    printf ("source file is bad; trying copy\n");
+  {
+    free(source_file.data);
+    printf("source file is bad; trying copy\n");
 
-	    if (LoadFileContents (CACHE_TEMP_SOURCE, &copy_file) < 0)
-		    {
-		      // fail.
-		      printf ("failed to read copy file\n");
-		      return 1;
-		    }
+    if (LoadFileContents(CACHE_TEMP_SOURCE, &copy_file, RETOUCH_DO_MASK) < 0)
+    {
+      // fail.
+      printf("failed to read copy file\n");
+      return 1;
+    }
 
-	    int to_use = FindMatchingPatch (copy_file.sha1,
-					    patch_sha1_str, num_patches);
+    int to_use = FindMatchingPatch(copy_file.sha1,
+				   patch_sha1_str, num_patches);
+    if (to_use >= 0)
+    {
+      copy_patch_value = patch_data[to_use];
+    }
 
-	    if (to_use >= 0)
-		    {
-		      copy_patch_value = patch_data[to_use];
-		    }
-
-	    if (copy_patch_value == NULL)
-		    {
-		      // fail.
-		      printf
-			("copy file doesn't match source SHA-1s either\n");
-		      return 1;
-		    }
-	  }
+    if (copy_patch_value == NULL)
+    {
+      // fail.
+      printf("copy file doesn't match source SHA-1s either\n");
+      return 1;
+    }
+  }
 
   int retry = 1;
   SHA_CTX ctx;
@@ -837,284 +805,256 @@ applypatch (const char *source_filename,
   // assume that target_filename (eg "/system/app/Foo.apk") is located
   // on the same filesystem as its top-level directory ("/system").
   // We need something that exists for calling statfs().
-  char target_fs[strlen (target_filename) + 1];
-  char *slash = strchr (target_filename + 1, '/');
-
+  char target_fs[strlen(target_filename) + 1];
+  char *slash = strchr(target_filename + 1, '/');
   if (slash != NULL)
-	  {
-	    int count = slash - target_filename;
-
-	    strncpy (target_fs, target_filename, count);
-	    target_fs[count] = '\0';
-	  }
+  {
+    int count = slash - target_filename;
+    strncpy(target_fs, target_filename, count);
+    target_fs[count] = '\0';
+  }
   else
-	  {
-	    strcpy (target_fs, target_filename);
-	  }
+  {
+    strcpy(target_fs, target_filename);
+  }
 
   do
-	  {
-	    // Is there enough room in the target filesystem to hold the patched
-	    // file?
+  {
+    // Is there enough room in the target filesystem to hold the patched
+    // file?
 
-	    if (strncmp (target_filename, "MTD:", 4) == 0 ||
-		strncmp (target_filename, "EMMC:", 5) == 0)
-		    {
-		      // If the target is a partition, we're actually going to
-		      // write the output to /tmp and then copy it to the
-		      // partition.  statfs() always returns 0 blocks free for
-		      // /tmp, so instead we'll just assume that /tmp has enough
-		      // space to hold the file.
+    if (strncmp(target_filename, "MTD:", 4) == 0 ||
+	strncmp(target_filename, "EMMC:", 5) == 0)
+    {
+      // If the target is a partition, we're actually going to
+      // write the output to /tmp and then copy it to the
+      // partition.  statfs() always returns 0 blocks free for
+      // /tmp, so instead we'll just assume that /tmp has enough
+      // space to hold the file.
 
-		      // We still write the original source to cache, in case
-		      // the partition write is interrupted.
-		      if (MakeFreeSpaceOnCache (source_file.size) < 0)
-			      {
-				printf ("not enough free space on /cache\n");
-				return 1;
-			      }
-		      if (SaveFileContents (CACHE_TEMP_SOURCE, source_file) <
-			  0)
-			      {
-				printf ("failed to back up source file\n");
-				return 1;
-			      }
-		      made_copy = 1;
-		      retry = 0;
-		    }
-	    else
-		    {
-		      int enough_space = 0;
+      // We still write the original source to cache, in case
+      // the partition write is interrupted.
+      if (MakeFreeSpaceOnCache(source_file.size) < 0)
+      {
+	printf("not enough free space on /cache\n");
+	return 1;
+      }
+      if (SaveFileContents(CACHE_TEMP_SOURCE, source_file) < 0)
+      {
+	printf("failed to back up source file\n");
+	return 1;
+      }
+      made_copy = 1;
+      retry = 0;
+    }
+    else
+    {
+      int enough_space = 0;
+      if (retry > 0)
+      {
+	size_t free_space = FreeSpaceForFile(target_fs);
+	enough_space = (free_space > (256 << 10)) &&	// 256k (two-block) minimum
+	  (free_space > (target_size * 3 / 2));	// 50% margin of error
+	printf
+	  ("target %ld bytes; free space %ld bytes; retry %d; enough %d\n",
+	   (long) target_size, (long) free_space, retry, enough_space);
+      }
 
-		      if (retry > 0)
-			      {
-				size_t free_space =
-				  FreeSpaceForFile (target_fs);
-				enough_space = (free_space > (256 << 10)) &&	// 256k (two-block) minimum
-				  (free_space > (target_size * 3 / 2));	// 50% margin of error
-				printf
-				  ("target %ld bytes; free space %ld bytes; retry %d; enough %d\n",
-				   (long) target_size, (long) free_space,
-				   retry, enough_space);
-			      }
+      if (!enough_space)
+      {
+	retry = 0;
+      }
 
-		      if (!enough_space)
-			      {
-				retry = 0;
-			      }
+      if (!enough_space && source_patch_value != NULL)
+      {
+	// Using the original source, but not enough free space.  First
+	// copy the source file to cache, then delete it from the original
+	// location.
 
-		      if (!enough_space && source_patch_value != NULL)
-			      {
-				// Using the original source, but not enough free space.  First
-				// copy the source file to cache, then delete it from the original
-				// location.
+	if (strncmp(source_filename, "MTD:", 4) == 0 ||
+	    strncmp(source_filename, "EMMC:", 5) == 0)
+	{
+	  // It's impossible to free space on the target filesystem by
+	  // deleting the source if the source is a partition.  If
+	  // we're ever in a state where we need to do this, fail.
+	  printf("not enough free space for target but source "
+		 "is partition\n");
+	  return 1;
+	}
 
-				if (strncmp (source_filename, "MTD:", 4) == 0
-				    || strncmp (source_filename, "EMMC:",
-						5) == 0)
-					{
-					  // It's impossible to free space on the target filesystem by
-					  // deleting the source if the source is a partition.  If
-					  // we're ever in a state where we need to do this, fail.
-					  printf
-					    ("not enough free space for target but source "
-					     "is partition\n");
-					  return 1;
-					}
+	if (MakeFreeSpaceOnCache(source_file.size) < 0)
+	{
+	  printf("not enough free space on /cache\n");
+	  return 1;
+	}
 
-				if (MakeFreeSpaceOnCache (source_file.size) <
-				    0)
-					{
-					  printf
-					    ("not enough free space on /cache\n");
-					  return 1;
-					}
+	if (SaveFileContents(CACHE_TEMP_SOURCE, source_file) < 0)
+	{
+	  printf("failed to back up source file\n");
+	  return 1;
+	}
+	made_copy = 1;
+	unlink(source_filename);
 
-				if (SaveFileContents
-				    (CACHE_TEMP_SOURCE, source_file) < 0)
-					{
-					  printf
-					    ("failed to back up source file\n");
-					  return 1;
-					}
-				made_copy = 1;
-				unlink (source_filename);
+	size_t free_space = FreeSpaceForFile(target_fs);
+	printf("(now %ld bytes free for target)\n", (long) free_space);
+      }
+    }
 
-				size_t free_space =
-				  FreeSpaceForFile (target_fs);
-				printf ("(now %ld bytes free for target)\n",
-					(long) free_space);
-			      }
-		    }
+    const Value *patch;
+    if (source_patch_value != NULL)
+    {
+      source_to_use = &source_file;
+      patch = source_patch_value;
+    }
+    else
+    {
+      source_to_use = &copy_file;
+      patch = copy_patch_value;
+    }
 
-	    const Value *patch;
+    if (patch->type != VAL_BLOB)
+    {
+      printf("patch is not a blob\n");
+      return 1;
+    }
 
-	    if (source_patch_value != NULL)
-		    {
-		      source_to_use = &source_file;
-		      patch = source_patch_value;
-		    }
-	    else
-		    {
-		      source_to_use = &copy_file;
-		      patch = copy_patch_value;
-		    }
+    SinkFn sink = NULL;
+    void *token = NULL;
+    output = -1;
+    outname = NULL;
+    if (strncmp(target_filename, "MTD:", 4) == 0 ||
+	strncmp(target_filename, "EMMC:", 5) == 0)
+    {
+      // We store the decoded output in memory.
+      msi.buffer = malloc(target_size);
+      if (msi.buffer == NULL)
+      {
+	printf("failed to alloc %ld bytes for output\n", (long) target_size);
+	return 1;
+      }
+      msi.pos = 0;
+      msi.size = target_size;
+      sink = MemorySink;
+      token = &msi;
+    }
+    else
+    {
+      // We write the decoded output to "<tgt-file>.patch".
+      outname = (char *) malloc(strlen(target_filename) + 10);
+      strcpy(outname, target_filename);
+      strcat(outname, ".patch");
 
-	    if (patch->type != VAL_BLOB)
-		    {
-		      printf ("patch is not a blob\n");
-		      return 1;
-		    }
+      output = open(outname, O_WRONLY | O_CREAT | O_TRUNC);
+      if (output < 0)
+      {
+	printf("failed to open output file %s: %s\n",
+	       outname, strerror(errno));
+	return 1;
+      }
+      sink = FileSink;
+      token = &output;
+    }
 
-	    SinkFn sink = NULL;
-	    void *token = NULL;
+    char *header = patch->data;
+    ssize_t header_bytes_read = patch->size;
 
-	    output = -1;
-	    outname = NULL;
-	    if (strncmp (target_filename, "MTD:", 4) == 0 ||
-		strncmp (target_filename, "EMMC:", 5) == 0)
-		    {
-		      // We store the decoded output in memory.
-		      msi.buffer = malloc (target_size);
-		      if (msi.buffer == NULL)
-			      {
-				printf
-				  ("failed to alloc %ld bytes for output\n",
-				   (long) target_size);
-				return 1;
-			      }
-		      msi.pos = 0;
-		      msi.size = target_size;
-		      sink = MemorySink;
-		      token = &msi;
-		    }
-	    else
-		    {
-		      // We write the decoded output to "<tgt-file>.patch".
-		      outname =
-			(char *) malloc (strlen (target_filename) + 10);
-		      strcpy (outname, target_filename);
-		      strcat (outname, ".patch");
+    SHA_init(&ctx);
 
-		      output = open (outname, O_WRONLY | O_CREAT | O_TRUNC);
-		      if (output < 0)
-			      {
-				printf ("failed to open output file %s: %s\n",
-					outname, strerror (errno));
-				return 1;
-			      }
-		      sink = FileSink;
-		      token = &output;
-		    }
+    int result;
 
-	    char *header = patch->data;
-	    ssize_t header_bytes_read = patch->size;
+    if (header_bytes_read >= 8 && memcmp(header, "BSDIFF40", 8) == 0)
+    {
+      result = ApplyBSDiffPatch(source_to_use->data, source_to_use->size,
+				patch, 0, sink, token, &ctx);
+    }
+    else if (header_bytes_read >= 8 && memcmp(header, "IMGDIFF2", 8) == 0)
+    {
+      result = ApplyImagePatch(source_to_use->data, source_to_use->size,
+			       patch, sink, token, &ctx);
+    }
+    else
+    {
+      printf("Unknown patch file format\n");
+      return 1;
+    }
 
-	    SHA_init (&ctx);
+    if (output >= 0)
+    {
+      fsync(output);
+      close(output);
+    }
 
-	    int result;
-
-	    if (header_bytes_read >= 8 && memcmp (header, "BSDIFF40", 8) == 0)
-		    {
-		      result =
-			ApplyBSDiffPatch (source_to_use->data,
-					  source_to_use->size, patch, 0, sink,
-					  token, &ctx);
-		    }
-	    else if (header_bytes_read >= 8 &&
-		     memcmp (header, "IMGDIFF2", 8) == 0)
-		    {
-		      result =
-			ApplyImagePatch (source_to_use->data,
-					 source_to_use->size, patch, sink,
-					 token, &ctx);
-		    }
-	    else
-		    {
-		      printf ("Unknown patch file format\n");
-		      return 1;
-		    }
-
-	    if (output >= 0)
-		    {
-		      fsync (output);
-		      close (output);
-		    }
-
-	    if (result != 0)
-		    {
-		      if (retry == 0)
-			      {
-				printf ("applying patch failed\n");
-				return result != 0;
-			      }
-		      else
-			      {
-				printf ("applying patch failed; retrying\n");
-			      }
-		      if (outname != NULL)
-			      {
-				unlink (outname);
-			      }
-		    }
-	    else
-		    {
-		      // succeeded; no need to retry
-		      break;
-		    }
-	  }
+    if (result != 0)
+    {
+      if (retry == 0)
+      {
+	printf("applying patch failed\n");
+	return result != 0;
+      }
+      else
+      {
+	printf("applying patch failed; retrying\n");
+      }
+      if (outname != NULL)
+      {
+	unlink(outname);
+      }
+    }
+    else
+    {
+      // succeeded; no need to retry
+      break;
+    }
+  }
   while (retry-- > 0);
 
-  const uint8_t *current_target_sha1 = SHA_final (&ctx);
-
-  if (memcmp (current_target_sha1, target_sha1, SHA_DIGEST_SIZE) != 0)
-	  {
-	    printf ("patch did not produce expected sha1\n");
-	    return 1;
-	  }
+  const uint8_t *current_target_sha1 = SHA_final(&ctx);
+  if (memcmp(current_target_sha1, target_sha1, SHA_DIGEST_SIZE) != 0)
+  {
+    printf("patch did not produce expected sha1\n");
+    return 1;
+  }
 
   if (output < 0)
-	  {
-	    // Copy the temp file to the partition.
-	    if (WriteToPartition (msi.buffer, msi.pos, target_filename) != 0)
-		    {
-		      printf ("write of patched data to %s failed\n",
-			      target_filename);
-		      return 1;
-		    }
-	    free (msi.buffer);
-	  }
+  {
+    // Copy the temp file to the partition.
+    if (WriteToPartition(msi.buffer, msi.pos, target_filename) != 0)
+    {
+      printf("write of patched data to %s failed\n", target_filename);
+      return 1;
+    }
+    free(msi.buffer);
+  }
   else
-	  {
-	    // Give the .patch file the same owner, group, and mode of the
-	    // original source file.
-	    if (chmod (outname, source_to_use->st.st_mode) != 0)
-		    {
-		      printf ("chmod of \"%s\" failed: %s\n", outname,
-			      strerror (errno));
-		      return 1;
-		    }
-	    if (chown (outname, source_to_use->st.st_uid,
-		       source_to_use->st.st_gid) != 0)
-		    {
-		      printf ("chown of \"%s\" failed: %s\n", outname,
-			      strerror (errno));
-		      return 1;
-		    }
+  {
+    // Give the .patch file the same owner, group, and mode of the
+    // original source file.
+    if (chmod(outname, source_to_use->st.st_mode) != 0)
+    {
+      printf("chmod of \"%s\" failed: %s\n", outname, strerror(errno));
+      return 1;
+    }
+    if (chown(outname, source_to_use->st.st_uid,
+	      source_to_use->st.st_gid) != 0)
+    {
+      printf("chown of \"%s\" failed: %s\n", outname, strerror(errno));
+      return 1;
+    }
 
-	    // Finally, rename the .patch file to replace the target file.
-	    if (rename (outname, target_filename) != 0)
-		    {
-		      printf ("rename of .patch to \"%s\" failed: %s\n",
-			      target_filename, strerror (errno));
-		      return 1;
-		    }
-	  }
+    // Finally, rename the .patch file to replace the target file.
+    if (rename(outname, target_filename) != 0)
+    {
+      printf("rename of .patch to \"%s\" failed: %s\n",
+	     target_filename, strerror(errno));
+      return 1;
+    }
+  }
 
   // If this run of applypatch created the copy, and we're here, we
   // can delete it.
   if (made_copy)
-    unlink (CACHE_TEMP_SOURCE);
+    unlink(CACHE_TEMP_SOURCE);
 
   // Success!
   return 0;
