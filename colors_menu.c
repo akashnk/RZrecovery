@@ -91,6 +91,7 @@ show_colors_menu ()
     "Grey",
     "RootzWiki",
     "Rave mode",
+    "The Ace",
     NULL
   };
 
@@ -109,7 +110,7 @@ show_colors_menu ()
 #define GREY			12
 #define ROOTZ			13
 #define RAVE			14
-
+#define GACE            15
   int chosen_item = -1;
 
   while (chosen_item != ITEM_BACK)
@@ -179,6 +180,10 @@ show_colors_menu ()
 		    case RAVE:
 		      set_icon("rz");
 		      set_random (1);
+		      break;
+		    case GACE:
+		      set_icon("rz");
+		      set_color (139, 181, 79);
 		      break;
 		    }
 	  }

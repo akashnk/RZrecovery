@@ -598,8 +598,10 @@ if [ "$BACKUP" == 1 ]; then
     TAR_OPTS="c"
     if [ "$COMPRESS" == "1" ]; then
      TAR_OPTS="${TAR_OPTS}z"
-     echo "* print Compression activated. Go make a sandwich."
-     echo "* print This will take forever, but your"
+     echo "* print Compression activated."
+     echo "* print Go make a sandwich."
+     echo "* print This will take forever,"
+     echo "* print  but your"
      echo "* print SD Card will thank you :)"
      echo "* print "
     fi 
@@ -648,7 +650,7 @@ if [ "$BACKUP" == 1 ]; then
     TIMESTAMP="`date +%Y%m%d-%H%M`"
     
     if [ -e /system/build.prop ]; then
-      VERSION=`cat /system/build.prop | grep ro.build.display.id | cut -d '=' -f2 | sed 's/ /_/g;s/(/-/g;s/)/-/g'`
+      VERSION=`cat /system/build.prop | grep ro.product.device | cut -d '=' -f2 | sed 's/ /_/g;s/(/-/g;s/)/-/g'`
       if [ ! -z "$VERSION" ]; then
         SUBNAME="$VERSION"-"$SUBNAME"
       fi 

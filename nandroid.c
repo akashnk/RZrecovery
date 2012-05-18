@@ -42,7 +42,7 @@ char* get_android_version()
   char line[512];
   while(fgets(line, sizeof(line), vers) != NULL && fgets(line, sizeof(line), vers) != EOF) //read a line
   {
-	if (strstr(line, "ro.build.display.id") != NULL)
+	if (strstr(line, "ro.product.device") != NULL)
 	{
 	  char* strptr = strstr(line, "=") + 1; 
 	  result = calloc(strlen(strptr) + 1, sizeof(char));
@@ -264,7 +264,7 @@ int backup_partition(const char* partition, const char* PREFIX, int compress, in
 	} 
 	else
 	{
-	  ui_print("Success!");
+	  ui_print("Success!\n");
 	  ui_reset_text_col();
 	  ensure_path_unmounted(partition_path);
 	  status = 0;
@@ -293,7 +293,7 @@ int backup_partition(const char* partition, const char* PREFIX, int compress, in
 	}
 	else
 	{
-	  ui_print("Success!");
+	  ui_print("Success!\n");
 	  ui_reset_text_col();
 	  ensure_path_unmounted(partition_path);
 	  status = 0;
@@ -479,7 +479,7 @@ int restore_partition(const char* partition, const char* PREFIX, int progress)
 	} 
 	else
 	{  
-	  ui_print("Success!");
+	  ui_print("Success!\n");
 	  ui_reset_text_col();
 	  if (strcmp(partition, ".android_secure") != 0) ensure_path_unmounted(restore_path);
 	  status = 0;
@@ -510,7 +510,7 @@ int restore_partition(const char* partition, const char* PREFIX, int progress)
 	}
 	else
 	{
-	  ui_print("Success!");
+	  ui_print("Success!\n");
 	  ui_reset_text_col();
 	  ensure_path_unmounted(restore_path);
 	  status = 0;

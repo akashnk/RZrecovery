@@ -808,7 +808,7 @@ int compare_string (const void *a, const void *b)
 void prompt_and_wait ()
 {
   char *MENU_HEADERS[] = { "Welcome to RZRecovery",
-  "by raidzero",
+  "ported by Skynet28 ",
   "",
   NULL
   };

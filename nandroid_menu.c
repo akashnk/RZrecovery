@@ -436,7 +436,8 @@ if (sdext_present)
 void
 show_nandroid_adv_r_menu ()
 {
-  char *headers[] = { "Choose partitions to restore",
+  char *headers[] = { "Choose partitions",
+   "to restore",
     "Nandroid Dir: ",
     "",
     "Backup:",
@@ -585,7 +586,8 @@ void restore_cwm_backup(char* filename)
 void
 show_cwm_menu ()
 {
-  char *headers[] = { "Choose a backup to restore",
+  char *headers[] = { "Choose a backup",
+   "to restore",
     "Backup:",
     "",
     "",
@@ -631,7 +633,8 @@ show_cwm_menu ()
 void
 show_delete_menu() 
 {
-  char *headers[] = { "Choose a backup to delete",
+  char *headers[] = { "Choose a backup",
+  " to delete",
     "Nandroid Dir:",
     "",
     "Backup:",
@@ -692,7 +695,8 @@ show_delete_menu()
 void
 show_compress_menu() 
 {
-  char *headers[] = { "Choose a backup to compress",
+  char *headers[] = { "Choose a backup ",
+  "to compress",
     "Nandroid Dir:",
     "",
     "Backup:",

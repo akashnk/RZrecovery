@@ -114,8 +114,6 @@ void show_nandroid_dir_menu()
 
 #define sdcard_nandroid 0
 #define sdcard_external 1
-#define emmc			2
-#define data_media		3
 
   headers[2] = get_nandroid_path();
 
@@ -134,12 +132,6 @@ void show_nandroid_dir_menu()
 		  break;
 		case sdcard_external:
 		  backuppath = "/sdcard/external_sd/nandroid";
-		  break;
-		case emmc:
-		  backuppath = "/emmc/nandroid";
-		  break;
-		case data_media:
-		  backuppath = "/data/media/nandroid";
 		  break;
 	  }
 	  
@@ -217,7 +209,7 @@ char* get_current_delay()
   }
   else
   {
-    delay = "185";
+    delay = "225";
   }
   return delay;
 }
@@ -233,7 +225,8 @@ void show_repeat_scroll_menu()
   strcat(delay_string, keyhold_delay);
   strcat(delay_string, " ms");
   
-  char* headers[] = { "Repeat-scroll delay (lower is faster)", 
+  char* headers[] = { "Repeat-scroll delay", 
+           "(lower is faster)", 
     delay_string,
     "",
     NULL
@@ -298,9 +291,12 @@ void set_usb_fat_only(int fat_only)
 void show_usb_options_menu()
 {
   char* headers[] = { "USB Mass Storage Options",
-    "Would you like to be able to mount ext",
-	"filesystems as USB mass storage devices?",
-	"Linux users: say yes, Windows: no",
+    "Would you like to be able",
+     "to mount ext",
+	"filesystems as USB mass ",
+	"storage devices?",
+	"Linux users: say yes",
+	" Windows: no",
 	"",
 	NULL
   };
