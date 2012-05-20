@@ -13,7 +13,7 @@ device_flash_type ()
 {
   if (the_flash_type == UNKNOWN)
 	  {
-	    if (access ("/dev/block/bml7", F_OK) == 0)
+	    if (access ("/dev/block/bml8", F_OK) == 0)
 		    {
 		      the_flash_type = BML;
 		    }
